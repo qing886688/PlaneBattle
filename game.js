@@ -11,6 +11,10 @@ const gameOverScreen = document.getElementById('gameOverScreen');
 const finalScoreElement = document.getElementById('finalScore');
 const audioLoadingMessage = document.getElementById('audioLoadingMessage');
 const restartButton = document.getElementById('restartButton');
+const difficultySelectScreen = document.getElementById('difficultySelectScreen');
+const difficultyDescription = document.getElementById('difficultyDescription');
+const hitFlashElement = document.getElementById('hitFlash');
+const radarContainer = document.getElementById('radar');
 
 // 设置画布尺寸
 let canvasWidth = 480;
@@ -59,6 +63,18 @@ let killCount = 0;
 let frameCount = 0;
 let lastFpsTime = 0;
 let fps = 0;
+let difficulty = 0; // 初始难度值
+let selectedDifficulty = null; // 用户选择的难度
+let gameStartTime = 0; // 游戏开始时间
+let gameElapsedTime = 0; // 游戏已进行时间（秒）
+let radarDots = [];
+let levelUpAnimationActive = false;
+let explosionElements = [];
+let lastDifficultyLevel = "";
+let gameState = 'waiting'; // 游戏状态: waiting, playing, gameover
+let difficultyLevel = 1;
+let powerupCounter = 0;
+let lastComboTime = 0;
 
 // 粒子系统
 let particles = [];
@@ -117,6 +133,7 @@ const sounds = {
 // 添加音量控制
 let soundEnabled = true;
 let audioContext = null;
+let audioLoaded = false;
 
 // 使用AudioContext生成音效
 function initAudio() {
@@ -135,337 +152,6 @@ function initAudio() {
         console.error("音频系统初始化失败:", e);
     }
 }
-
-// 生成射击音效
-function createShootSound() {
-    if (!audioContext) return null;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.type = 'square';
-    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(300, audioContext.currentTime + 0.1);
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.1);
-    
-    return { oscillator, gainNode };
-}
-
-// 生成爆炸音效
-function createExplosionSound() {
-    if (!audioContext) return null;
-    
-    const noiseLength = 0.5;
-    const bufferSize = audioContext.sampleRate * noiseLength;
-    const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-    const data = buffer.getChannelData(0);
-    
-    // 填充白噪声数据
-    for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
-    
-    // 创建噪声播放源
-    const noise = audioContext.createBufferSource();
-    noise.buffer = buffer;
-    
-    // 创建低通滤波器，让爆炸声更浑厚
-    const filter = audioContext.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 200;
-    filter.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + noiseLength);
-    
-    // 音量控制节点
-    const gainNode = audioContext.createGain();
-    gainNode.gain.setValueAtTime(0.7, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + noiseLength);
-    
-    // 连接节点
-    noise.connect(filter);
-    filter.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    // 开始播放
-    noise.start();
-    noise.stop(audioContext.currentTime + noiseLength);
-    
-    return { noise, gainNode, filter };
-}
-
-// 生成道具音效
-function createPowerupSound() {
-    if (!audioContext) return null;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.1);
-    
-    gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.2);
-    
-    return { oscillator, gainNode };
-}
-
-// 生成护盾音效
-function createShieldSound() {
-    if (!audioContext) return null;
-    
-    const oscillator = audioContext.createOscillator();
-    const oscillator2 = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-    oscillator.frequency.linearRampToValueAtTime(400, audioContext.currentTime + 0.3);
-    
-    oscillator2.type = 'sine';
-    oscillator2.frequency.setValueAtTime(300, audioContext.currentTime);
-    oscillator2.frequency.linearRampToValueAtTime(600, audioContext.currentTime + 0.3);
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-    
-    oscillator.connect(gainNode);
-    oscillator2.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.start();
-    oscillator2.start();
-    oscillator.stop(audioContext.currentTime + 0.3);
-    oscillator2.stop(audioContext.currentTime + 0.3);
-    
-    return { oscillator, oscillator2, gainNode };
-}
-
-// 生成炸弹音效
-function createBombSound() {
-    if (!audioContext) return null;
-    
-    const noiseLength = 1.0;
-    const bufferSize = audioContext.sampleRate * noiseLength;
-    const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-    const data = buffer.getChannelData(0);
-    
-    // 填充白噪声数据
-    for (let i = 0; i < bufferSize; i++) {
-        data[i] = Math.random() * 2 - 1;
-    }
-    
-    // 创建噪声播放源
-    const noise = audioContext.createBufferSource();
-    noise.buffer = buffer;
-    
-    // 创建低通滤波器
-    const filter = audioContext.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(800, audioContext.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(80, audioContext.currentTime + noiseLength);
-    
-    // 音量控制节点
-    const gainNode = audioContext.createGain();
-    gainNode.gain.setValueAtTime(1.0, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + noiseLength);
-    
-    // 连接节点
-    noise.connect(filter);
-    filter.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    // 开始播放
-    noise.start();
-    noise.stop(audioContext.currentTime + noiseLength);
-    
-    return { noise, gainNode, filter };
-}
-
-// 生成受击音效
-function createHitSound() {
-    if (!audioContext) return null;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.type = 'sawtooth';
-    oscillator.frequency.setValueAtTime(150, audioContext.currentTime);
-    oscillator.frequency.linearRampToValueAtTime(50, audioContext.currentTime + 0.2);
-    
-    gainNode.gain.setValueAtTime(0.6, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.2);
-    
-    return { oscillator, gainNode };
-}
-
-// 生成升级音效
-function createLevelUpSound() {
-    if (!audioContext) return null;
-    
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
-    oscillator.frequency.linearRampToValueAtTime(500, audioContext.currentTime + 0.1);
-    oscillator.frequency.linearRampToValueAtTime(700, audioContext.currentTime + 0.2);
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.6, audioContext.currentTime + 0.1);
-    gainNode.gain.linearRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 0.3);
-    
-    return { oscillator, gainNode };
-}
-
-// 生成成就音效
-function createAchievementSound() {
-    if (!audioContext) return null;
-    
-    const oscillator1 = audioContext.createOscillator();
-    const oscillator2 = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator1.type = 'sine';
-    oscillator1.frequency.setValueAtTime(400, audioContext.currentTime);
-    oscillator1.frequency.linearRampToValueAtTime(600, audioContext.currentTime + 0.1);
-    
-    oscillator2.type = 'sine';
-    oscillator2.frequency.setValueAtTime(500, audioContext.currentTime + 0.1);
-    oscillator2.frequency.linearRampToValueAtTime(800, audioContext.currentTime + 0.2);
-    
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.6, audioContext.currentTime + 0.1);
-    gainNode.gain.linearRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
-    
-    oscillator1.connect(gainNode);
-    oscillator2.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator1.start();
-    oscillator2.start(audioContext.currentTime + 0.1);
-    oscillator1.stop(audioContext.currentTime + 0.2);
-    oscillator2.stop(audioContext.currentTime + 0.4);
-    
-    return { oscillator1, oscillator2, gainNode };
-}
-
-// 播放音效的函数
-function playSound(sound) {
-    if (!soundEnabled || !audioContext) return;
-    
-    // 添加视觉反馈
-    const soundButton = document.getElementById('toggleSound');
-    soundButton.classList.add('sound-playing');
-    
-    // 移除动画类以便可以重新触发
-    setTimeout(() => {
-        soundButton.classList.remove('sound-playing');
-    }, 700);
-    
-    // 根据音效类型生成声音
-    switch (sound) {
-        case 'shoot':
-            createShootSound();
-            break;
-        case 'explosion':
-            createExplosionSound();
-            break;
-        case 'powerup':
-            createPowerupSound();
-            break;
-        case 'shield':
-            createShieldSound();
-            break;
-        case 'bomb':
-            createBombSound();
-            break;
-        case 'hit':
-            createHitSound();
-            break;
-        case 'levelUp':
-            createLevelUpSound();
-            break;
-        case 'achievement':
-            createAchievementSound();
-            break;
-        case 'gameOver':
-            // 游戏结束音效（组合多个声音）
-            createExplosionSound();
-            setTimeout(() => createHitSound(), 300);
-            break;
-    }
-}
-
-// 停止指定音效 (用于旧的Audio接口)
-function stopSound(sound) {
-    // 由于我们使用AudioContext生成即时声音，这里不需要实现
-}
-
-// 添加用户交互音频解锁
-function unlockAudio() {
-    if (audioContext) {
-        // 创建一个临时的空白音频节点，触发音频系统
-        const buffer = audioContext.createBuffer(1, 1, 22050);
-        const source = audioContext.createBufferSource();
-        source.buffer = buffer;
-        source.connect(audioContext.destination);
-        source.start(0);
-        console.log("音频系统已解锁");
-    }
-}
-
-// 添加音频加载状态管理
-let audioLoaded = false;
-
-// 修改初始化页面加载函数
-window.addEventListener('load', function() {
-    console.log("页面加载完成");
-    createStars();
-    draw();
-    
-    // 初始化音频系统
-    initAudio();
-    
-    // 添加音频切换按钮的监听
-    document.getElementById('toggleSound').addEventListener('click', function() {
-        soundEnabled = !soundEnabled;
-        this.textContent = soundEnabled ? '🔊' : '🔇';
-        
-        if (soundEnabled) {
-            unlockAudio();
-            playSound('powerup');
-        }
-    });
-    
-    // 用户交互时解锁音频
-    document.addEventListener('click', unlockAudio, { once: true });
-});
 
 // 在游戏状态部分添加新的奖励相关变量
 let powerups = [];  // 道具数组
@@ -501,22 +187,77 @@ const ACHIEVEMENTS = [
     { id: 'survivor', name: '幸存者', description: '在一局游戏中存活3分钟', threshold: 180, achieved: false, score: 500 }
 ];
 
-// 在游戏状态部分添加新的难度变量
-let difficulty = 0; // 初始难度值
-let gameStartTime = 0; // 游戏开始时间
-let gameElapsedTime = 0; // 游戏已进行时间（秒）
-
-// 全局变量部分添加
-const hitFlashElement = document.getElementById('hitFlash');
-const radarContainer = document.getElementById('radar');
-let radarDots = [];
-let levelUpAnimationActive = false;
-let explosionElements = [];
-let lastDifficultyLevel = "";
-
 // 加载图像和音效
 function loadResources() {
     // 暂时使用现有代码，后续可扩展图像加载
+}
+
+// 生成射击音效
+function createShootSound() {
+    if (!audioContext) return null;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(300, audioContext.currentTime + 0.1);
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.1);
+    
+    return { oscillator, gainNode };
+}
+
+// 解锁音频
+function unlockAudio() {
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+}
+
+// 播放声音
+function playSound(sound) {
+    if (!soundEnabled || !audioContext) return;
+    
+    switch(sound) {
+        case 'shoot':
+            createShootSound();
+            break;
+        case 'levelUp':
+            createLevelUpSound();
+            break;
+        // 其他声音类型...
+    }
+}
+
+// 创建等级提升音效
+function createLevelUpSound() {
+    if (!audioContext) return null;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.15);
+    oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.3);
+    
+    gainNode.gain.setValueAtTime(0.01, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.1);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.3);
 }
 
 // 创建星星背景
@@ -560,228 +301,6 @@ function drawStars() {
         ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
         ctx.fill();
     }
-}
-
-// 创建粒子
-function createParticle(x, y, color, speedModifier = 1) {
-    return {
-        x,
-        y,
-        size: Math.random() * 5 + 2,
-        color,
-        speedX: (Math.random() - 0.5) * (3 * speedModifier),
-        speedY: (Math.random() - 0.5) * (3 * speedModifier),
-        life: Math.random() * 40 + 40,
-        maxLife: Math.random() * 40 + 40,
-        rotation: Math.random() * Math.PI * 2
-    };
-}
-
-// 创建爆炸效果
-function createExplosion(x, y, color, amount) {
-    // 创建标准的粒子爆炸效果
-    const explosion = {
-        particles: [],
-        x,
-        y,
-        time: 0
-    };
-    
-    for (let i = 0; i < amount; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = Math.random() * 5 + 2;
-        explosion.particles.push({
-            x: 0,
-            y: 0,
-            speedX: Math.cos(angle) * speed,
-            speedY: Math.sin(angle) * speed,
-            size: Math.random() * 4 + 2,
-            color,
-            life: Math.random() * 30 + 20,
-            maxLife: Math.random() * 30 + 20,
-            rotation: Math.random() * Math.PI * 2
-        });
-    }
-    
-    explosions.push(explosion);
-    
-    // 为大型爆炸添加DOM视觉效果
-    if (amount > 20) {
-        // 获取画布相对于视口的位置
-        const canvasBounds = canvas.getBoundingClientRect();
-        const explosionX = canvasBounds.left + x;
-        const explosionY = canvasBounds.top + y;
-        
-        // 创建DOM爆炸效果
-        createDOMExplosion(x, y, amount * 2, color);
-        
-        // 添加屏幕震动效果
-        if (amount > 50) {
-            shakeScreen();
-        }
-    }
-}
-
-// 更新粒子
-function updateParticles() {
-    // 玩家飞机尾焰粒子
-    player.trailTimer++;
-    if (player.trailTimer >= 2) {
-        player.trailTimer = 0;
-        for (let i = 0; i < 2; i++) {
-            const particle = createParticle(
-                player.x + player.width / 2 - 5 + Math.random() * 10,
-                player.y + player.height - 5,
-                `hsl(${Math.random() * 60 + 180}, 100%, 50%)`,
-                0.5
-            );
-            particle.speedX = (Math.random() - 0.5) * 1;
-            particle.speedY = Math.random() * 2 + 1;
-            particles.push(particle);
-        }
-    }
-    
-    // 更新现有粒子
-    for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.speedX;
-        p.y += p.speedY;
-        p.life--;
-        p.size *= 0.97;
-        
-        if (p.life <= 0 || p.size < 0.5) {
-            particles.splice(i, 1);
-        }
-    }
-    
-    // 更新爆炸效果
-    for (let i = explosions.length - 1; i >= 0; i--) {
-        const exp = explosions[i];
-        exp.time++;
-        
-        for (let j = 0; j < exp.particles.length; j++) {
-            const p = exp.particles[j];
-            p.x += p.speedX;
-            p.y += p.speedY;
-            p.life--;
-            p.size *= 0.96;
-            p.speedX *= 0.98;
-            p.speedY *= 0.98;
-        }
-        
-        // 移除完成的爆炸
-        if (exp.time > 50) {
-            explosions.splice(i, 1);
-        }
-    }
-    
-    // 子弹射击粒子
-    bullets.forEach(bullet => {
-        if (Math.random() < 0.2) {
-            const particle = createParticle(
-                bullet.x + bullet.width / 2,
-                bullet.y + bullet.height,
-                `hsl(${Math.random() * 60 + 100}, 100%, 70%)`,
-                0.3
-            );
-            particle.speedX = (Math.random() - 0.5) * 0.5;
-            particle.speedY = Math.random() * 1;
-            particle.life = 10 + Math.random() * 10;
-            particles.push(particle);
-        }
-    });
-}
-
-// 绘制粒子
-function drawParticles() {
-    // 绘制普通粒子
-    particles.forEach(p => {
-        ctx.save();
-        ctx.globalAlpha = p.life / p.maxLife;
-        ctx.fillStyle = p.color;
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rotation);
-        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-        ctx.restore();
-    });
-    
-    // 绘制爆炸效果
-    explosions.forEach(exp => {
-        exp.particles.forEach(p => {
-            ctx.save();
-            ctx.globalAlpha = p.life / p.maxLife;
-            ctx.fillStyle = p.color;
-            ctx.translate(exp.x + p.x, exp.y + p.y);
-            ctx.rotate(p.rotation);
-            ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-            ctx.restore();
-        });
-    });
-}
-
-// 更新FPS计数器
-function updateFPS(time) {
-    if (!lastFpsTime) {
-        lastFpsTime = time;
-        fps = 0;
-        return;
-    }
-    
-    const delta = time - lastFpsTime;
-    frameCount++;
-    
-    if (delta >= 1000) {
-        fps = Math.round((frameCount * 1000) / delta);
-        frameCount = 0;
-        lastFpsTime = time;
-        fpsElement.textContent = `FPS: ${fps}`;
-    }
-}
-
-// 初始化游戏
-function init() {
-    // 初始化游戏状态
-    score = 0;
-    lives = 3;
-    gameTime = 0;
-    killCount = 0;
-    
-    // 重置玩家位置
-    player.x = canvas.width / 2 - player.width / 2;
-    player.y = canvas.height - player.height - 20;
-    
-    // 清空所有游戏对象
-    enemies = [];
-    bullets = [];
-    particles = [];
-    powerups = [];
-    explosions = [];
-    
-    // 重置游戏状态
-    gameState = 'playing';
-    difficultyLevel = 1;
-    
-    // 更新得分显示
-    scoreElement.textContent = score;
-    livesElement.textContent = lives;
-    killCountElement.textContent = `击毁: ${killCount}`;
-    
-    // 创建星空背景
-    stars = [];
-    createStars();
-    
-    // 重置道具相关
-    powerupCounter = 0;
-    specialWeaponCooldown = 0;
-    shieldActive = false;
-    shieldDuration = 0;
-    
-    // 重置combo计数
-    comboCount = 0;
-    lastComboTime = 0;
-    
-    // 隐藏游戏结束画面
-    hideGameOverScreen();
 }
 
 // 生成敌机
@@ -833,231 +352,35 @@ function spawnEnemy() {
     enemies.push(enemy);
 }
 
-// 生成子弹
+// 发射子弹
 function fireBullet() {
-    if (score < 100) {
-        // 初始阶段 - 单发普通子弹
-        const bullet = {
-            x: player.x + player.width / 2 - 5,
-            y: player.y,
-            width: 10,
-            height: 20,
-            speed: 7,
-            color: '#2ecc71',
-            power: 1,
-            type: 'normal'
-        };
-        bullets.push(bullet);
-    } else if (score < 300) {
-        // 中期 - 三发子弹
-        // 中间主弹
-        bullets.push({
-            x: player.x + player.width / 2 - 5,
-            y: player.y,
-            width: 10,
-            height: 20,
-            speed: 7,
-            color: '#2ecc71',
-            power: 1,
-            type: 'normal'
-        });
-        
-        // 左侧子弹
-        bullets.push({
-            x: player.x + player.width / 2 - 20,
-            y: player.y + 10,
-            width: 8,
-            height: 15,
-            speed: 6.5,
-            color: '#2ecc71',
-            power: 1,
-            type: 'side'
-        });
-        
-        // 右侧子弹
-        bullets.push({
-            x: player.x + player.width / 2 + 12,
-            y: player.y + 10,
-            width: 8,
-            height: 15,
-            speed: 6.5,
-            color: '#2ecc71',
-            power: 1,
-            type: 'side'
-        });
-    } else if (score < 600) {
-        // 高级阶段 - 五发配置
-        // 中间主弹
-        bullets.push({
-            x: player.x + player.width / 2 - 5,
-            y: player.y - 5,
-            width: 10,
-            height: 20,
-            speed: 8,
-            color: '#3498db',
-            power: 2,
-            type: 'normal'
-        });
-        
-        // 左右两侧子弹
-        bullets.push({
-            x: player.x + player.width / 2 - 20,
-            y: player.y + 10,
-            width: 8,
-            height: 15,
-            speed: 7,
-            color: '#2ecc71',
-            power: 1,
-            type: 'side'
-        });
-        
-        bullets.push({
-            x: player.x + player.width / 2 + 12,
-            y: player.y + 10,
-            width: 8,
-            height: 15,
-            speed: 7,
-            color: '#2ecc71',
-            power: 1,
-            type: 'side'
-        });
-        
-        // 外侧跟踪弹
-        bullets.push({
-            x: player.x + player.width / 2 - 30,
-            y: player.y + 15,
-            width: 6,
-            height: 12,
-            speed: 6,
-            color: '#e67e22',
-            power: 1,
-            type: 'homing',
-            angle: -0.2
-        });
-        
-        bullets.push({
-            x: player.x + player.width / 2 + 24,
-            y: player.y + 15,
-            width: 6,
-            height: 12,
-            speed: 6,
-            color: '#e67e22',
-            power: 1,
-            type: 'homing',
-            angle: 0.2
-        });
-    } else {
-        // 精英阶段 - 歼20全火力
-        // 中间主弹 - 激光
-        bullets.push({
-            x: player.x + player.width / 2 - 2,
-            y: player.y - 15,
-            width: 4,
-            height: 30,
-            speed: 12,
-            color: '#9b59b6',
-            power: 3,
-            type: 'laser'
-        });
-        
-        // 机翼弹
-        bullets.push({
-            x: player.x + player.width / 2 - 22,
-            y: player.y,
-            width: 8,
-            height: 16,
-            speed: 8,
-            color: '#3498db',
-            power: 2,
-            type: 'normal'
-        });
-        
-        bullets.push({
-            x: player.x + player.width / 2 + 14,
-            y: player.y,
-            width: 8,
-            height: 16,
-            speed: 8,
-            color: '#3498db',
-            power: 2,
-            type: 'normal'
-        });
-        
-        // 跟踪导弹
-        bullets.push({
-            x: player.x + player.width / 2 - 35,
-            y: player.y + 10,
-            width: 8,
-            height: 14,
-            speed: 5,
-            color: '#e74c3c',
-            power: 2,
-            type: 'missile',
-            angle: -0.1,
-            tracking: true
-        });
-        
-        bullets.push({
-            x: player.x + player.width / 2 + 27,
-            y: player.y + 10,
-            width: 8,
-            height: 14,
-            speed: 5,
-            color: '#e74c3c',
-            power: 2,
-            type: 'missile',
-            angle: 0.1,
-            tracking: true
-        });
-    }
+    if (specialWeaponCooldown > 0) return;
     
-    // 创建发射粒子效果
-    for (let i = 0; i < 10; i++) {
-        const particle = createParticle(
-            player.x + player.width / 2,
-            player.y,
-            `hsl(${Math.random() * 60 + 100}, 100%, 70%)`,
-            1
-        );
-        particle.speedY = -Math.random() * 2 - 1;
-        particles.push(particle);
-    }
-    
-    // 添加射击音效
+    // 播放射击音效
     playSound('shoot');
+    
+    // 创建子弹
+    const bullet = {
+        x: player.x + player.width / 2 - 5,
+        y: player.y,
+        width: 10,
+        height: 20,
+        speed: 7,
+        color: '#2ecc71',
+        power: 1,
+        type: 'normal'
+    };
+    bullets.push(bullet);
+    
+    // 设置冷却时间
+    specialWeaponCooldown = 10;
 }
 
-// 更新游戏状态
+// 更新游戏
 function update(time) {
-    // 计算增量时间
     const deltaTime = time - lastTime;
-    lastTime = time;
-    gameTime += deltaTime;
     
-    // 更新游戏已进行时间（秒）
-    gameElapsedTime = Math.floor((gameTime) / 1000);
-    
-    // 更新游戏时间显示
-    const minutes = Math.floor(gameElapsedTime / 60);
-    const seconds = gameElapsedTime % 60;
-    const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    document.getElementById('gameTime').textContent = timeStr;
-    
-    // 计算难度值 - 随时间缓慢增加
-    // 每30秒增加难度值30，但开始的1分钟内难度增加较慢
-    if (gameElapsedTime < 60) {
-        difficulty = gameElapsedTime * 0.5; // 前1分钟缓慢增加
-    } else {
-        difficulty = 30 + (gameElapsedTime - 60) * 1; // 之后每秒增加1点难度
-    }
-    
-    // 更新难度级别显示
-    updateDifficultyLevel();
-    
-    // 更新FPS
-    updateFPS(time);
-    
-    // 移动玩家
+    // 更新玩家位置
     if (keys.ArrowLeft && player.x > 0) {
         player.x -= player.speed;
     }
@@ -1070,1058 +393,338 @@ function update(time) {
     if (keys.ArrowDown && player.y < canvas.height - player.height) {
         player.y += player.speed;
     }
-
-    // 移动子弹
-    for (let bulletIndex = bullets.length - 1; bulletIndex >= 0; bulletIndex--) {
-        const bullet = bullets[bulletIndex];
-        
-        // 根据子弹类型更新位置
-        switch (bullet.type) {
-            case 'normal':
-                bullet.y -= bullet.speed;
-                break;
-                
-            case 'side':
-                bullet.y -= bullet.speed;
-                bullet.x += Math.sin((bullet.y) * 0.05) * 2;
-                break;
-                
-            case 'homing':
-                // 简单的跟踪逻辑
-                bullet.y -= bullet.speed * Math.cos(bullet.angle);
-                bullet.x += bullet.speed * Math.sin(bullet.angle);
-                
-                // 轻微矫正角度
-                if (bullet.angle > 0) {
-                    bullet.angle = Math.max(bullet.angle - 0.01, 0);
-                } else if (bullet.angle < 0) {
-                    bullet.angle = Math.min(bullet.angle + 0.01, 0);
-                }
-                break;
-                
-            case 'laser':
-                bullet.y -= bullet.speed;
-                // 激光效果 - 拉长
-                bullet.height += 1;
-                break;
-                
-            case 'missile':
-                bullet.y -= bullet.speed * Math.cos(bullet.angle);
-                bullet.x += bullet.speed * Math.sin(bullet.angle);
-                
-                // 如果有敌人，尝试跟踪最近的敌人
-                if (bullet.tracking && enemies.length > 0) {
-                    // 寻找最近的敌人
-                    let closestEnemy = null;
-                    let minDist = Infinity;
-                    
-                    for (const enemy of enemies) {
-                        const dx = enemy.x + enemy.width/2 - bullet.x;
-                        const dy = enemy.y + enemy.height/2 - bullet.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-                        
-                        if (dist < minDist) {
-                            minDist = dist;
-                            closestEnemy = enemy;
-                        }
-                    }
-                    
-                    // 如果有敌人且在一定范围内，调整导弹方向
-                    if (closestEnemy && minDist < 300) {
-                        const dx = closestEnemy.x + closestEnemy.width/2 - bullet.x;
-                        const dy = closestEnemy.y + closestEnemy.height/2 - bullet.y;
-                        const targetAngle = Math.atan2(dx, -dy);
-                        
-                        // 缓慢调整导弹角度朝向目标
-                        const angleDiff = targetAngle - bullet.angle;
-                        
-                        // 归一化角度差
-                        const normAngleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
-                        
-                        // 调整导弹角度
-                        bullet.angle += normAngleDiff * 0.05;
-                    }
-                }
-                break;
-        }
+    if (keys.Space) {
+        fireBullet();
+    }
+    
+    // 更新子弹位置
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
+        bullet.y -= bullet.speed;
         
         // 移除超出屏幕的子弹
-        if (bullet.y < -bullet.height || 
-            bullet.x < -bullet.width || 
-            bullet.x > canvas.width + bullet.width) {
-            bullets.splice(bulletIndex, 1);
+        if (bullet.y + bullet.height < 0) {
+            bullets.splice(i, 1);
         }
     }
-
-    // 移动敌机
-    for (let enemyIndex = enemies.length - 1; enemyIndex >= 0; enemyIndex--) {
-        const enemy = enemies[enemyIndex];
+    
+    // 随机生成敌机 (根据难度调整生成频率)
+    if (Math.random() < 0.02 + (difficulty / 1000)) {
+        spawnEnemy();
+    }
+    
+    // 更新敌机位置
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const enemy = enemies[i];
         enemy.y += enemy.speed;
-        enemy.rotation += enemy.rotationSpeed;
-        
-        // 检测敌机与子弹碰撞
-        for (let bulletIndex = bullets.length - 1; bulletIndex >= 0; bulletIndex--) {
-            const bullet = bullets[bulletIndex];
-            if (
-                bullet.x < enemy.x + enemy.width &&
-                bullet.x + bullet.width > enemy.x &&
-                bullet.y < enemy.y + enemy.height &&
-                bullet.y + bullet.height > enemy.y
-            ) {
-                // 击中敌机，减少敌机生命值
-                enemy.health -= bullet.power;
-                
-                // 创建击中效果
-                for (let i = 0; i < 5; i++) {
-                    const particle = createParticle(
-                        bullet.x + bullet.width / 2,
-                        bullet.y,
-                        enemy.color,
-                        1.5
-                    );
-                    particles.push(particle);
-                }
-                
-                // 移除子弹
-                bullets.splice(bulletIndex, 1);
-                
-                // 敌机被摧毁
-                if (enemy.health <= 0) {
-                    enemies.splice(enemyIndex, 1);
-                    
-                    // 播放爆炸音效
-                    playSound('explosion');
-                    
-                    // 创建爆炸效果
-                    createExplosion(
-                        enemy.x + enemy.width / 2,
-                        enemy.y + enemy.height / 2,
-                        enemy.color,
-                        30
-                    );
-                    
-                    // 增加连击
-                    comboCount++;
-                    comboTimer = 120; // 2秒连击窗口期
-                    
-                    // 更新连击倍数
-                    comboMultiplier = Math.min(5, 1 + Math.floor(comboCount / 5));
-                    
-                    // 击杀得分加成 - 使用敌机的scoreValue
-                    const baseScore = enemy.scoreValue * enemy.maxHealth;
-                    const comboBonus = Math.floor(baseScore * (comboMultiplier - 1) * 0.5);
-                    const totalScore = baseScore + comboBonus;
-                    
-                    score += totalScore;
-                    killCount++;
-                    scoreElement.textContent = score;
-                    killCountElement.textContent = `击毁: ${killCount}`;
-                    
-                    // 显示浮动连击得分
-                    if (comboCount > 1) {
-                        const floatingCombo = document.createElement('div');
-                        floatingCombo.className = 'floating-score';
-                        floatingCombo.textContent = `+${totalScore} (x${comboMultiplier})`;
-                        floatingCombo.style.left = `${enemy.x + enemy.width/2}px`;
-                        floatingCombo.style.top = `${enemy.y}px`;
-                        document.body.appendChild(floatingCombo);
-                        
-                        setTimeout(() => {
-                            floatingCombo.style.opacity = '0';
-                            floatingCombo.style.transform = 'translateY(-50px)';
-                            setTimeout(() => {
-                                document.body.removeChild(floatingCombo);
-                            }, 1000);
-                        }, 10);
-                    }
-                    
-                    // 闪烁分数
-                    scoreElement.style.textShadow = "0 0 15px rgba(255, 204, 0, 1)";
-                    setTimeout(() => {
-                        scoreElement.style.textShadow = "0 0 5px rgba(255, 204, 0, 0.7)";
-                    }, 300);
-                    
-                    // 检查是否达成成就
-                    checkAchievements();
-                    
-                    // 随机掉落道具
-                    dropPowerup(
-                        enemy.x + enemy.width / 2,
-                        enemy.y + enemy.height / 2
-                    );
-                    
-                    // 打断当前循环，因为敌机已经被移除
-                    break;
-                }
-            }
-        }
-        
-        // 如果敌机已被移除，则跳过后续碰撞检测
-        if (enemyIndex >= enemies.length) continue;
-        
-        // 检测敌机与玩家碰撞
-        if (
-            player.x < enemy.x + enemy.width &&
-            player.x + player.width > enemy.x &&
-            player.y < enemy.y + enemy.height &&
-            player.y + player.height > enemy.y
-        ) {
-            // 玩家被敌机撞击
-            enemies.splice(enemyIndex, 1);
-            
-            // 播放击中音效
-            playSound('hit');
-            
-            // 创建爆炸效果
-            createExplosion(
-                enemy.x + enemy.width / 2,
-                enemy.y + enemy.height / 2,
-                enemy.color,
-                20
-            );
-            
-            // 创建玩家受伤效果
-            for (let i = 0; i < 20; i++) {
-                const particle = createParticle(
-                    player.x + player.width / 2,
-                    player.y + player.height / 2,
-                    player.color,
-                    2
-                );
-                particles.push(particle);
-            }
-            
-            // 显示命中闪烁
-            showHitFlash();
-            
-            // 屏幕震动
-            shakeScreen();
-            
-            lives--;
-            livesElement.textContent = lives;
-            
-            // 生命值闪烁效果
-            livesElement.style.textShadow = "0 0 15px rgba(255, 0, 0, 1)";
-            setTimeout(() => {
-                livesElement.style.textShadow = "0 0 5px rgba(255, 204, 0, 0.7)";
-            }, 300);
-            
-            // 屏幕闪烁
-            canvas.style.boxShadow = "0 0 20px rgba(255, 0, 0, 0.7)";
-            setTimeout(() => {
-                canvas.style.boxShadow = "0 0 15px rgba(0, 100, 255, 0.6)";
-            }, 200);
-            
-            if (lives <= 0) {
-                gameOver();
-            }
-            
-            continue;
-        }
         
         // 移除超出屏幕的敌机
         if (enemy.y > canvas.height) {
-            enemies.splice(enemyIndex, 1);
+            enemies.splice(i, 1);
         }
+    }
+    
+    // 检测子弹与敌机碰撞
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
+        
+        for (let j = enemies.length - 1; j >= 0; j--) {
+            const enemy = enemies[j];
+            
+            // 碰撞检测
+            if (bullet.x < enemy.x + enemy.width &&
+                bullet.x + bullet.width > enemy.x &&
+                bullet.y < enemy.y + enemy.height &&
+                bullet.y + bullet.height > enemy.y) {
+                
+                // 敌机受到伤害
+                enemy.health -= bullet.power;
+                
+                // 创建击中特效
+                createHitEffect(bullet.x, bullet.y);
+                
+                // 敌机被击败
+                if (enemy.health <= 0) {
+                    // 更新得分
+                    score += enemy.scoreValue;
+                    scoreElement.textContent = score;
+                    
+                    // 更新击杀数
+                    killCount++;
+                    killCountElement.textContent = `击毁: ${killCount}`;
+                    
+                    // 创建爆炸效果
+                    createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2, enemy.width);
+                    
+                    // 移除敌机
+                    enemies.splice(j, 1);
+                }
+                
+                // 移除子弹
+                bullets.splice(i, 1);
+                break;
+            }
+        }
+    }
+    
+    // 检测玩家与敌机碰撞
+    for (let i = enemies.length - 1; i >= 0; i--) {
+        const enemy = enemies[i];
+        
+        if (player.x < enemy.x + enemy.width &&
+            player.x + player.width > enemy.x &&
+            player.y < enemy.y + enemy.height &&
+            player.y + player.height > enemy.y) {
+            
+            // 玩家被击中，减少生命值
+            lives--;
+            livesElement.textContent = lives;
+            
+            // 移除敌机
+            enemies.splice(i, 1);
+            
+            // 创建爆炸效果
+            
+            // 检查游戏是否结束
+            if (lives <= 0) {
+                gameOver();
+                return;
+            }
+            
+            break;
+        }
+    }
+    
+    // 更新特殊武器冷却时间
+    if (specialWeaponCooldown > 0) {
+        specialWeaponCooldown--;
     }
     
     // 更新星星
     updateStars();
     
-    // 更新粒子系统
-    updateParticles();
-    
-    // 随机生成敌机 - 根据难度调整生成频率
-    const baseSpawnRate = 0.005; // 初始生成率非常低
-    const difficultyFactor = Math.min(0.03, difficulty / 1000); // 随难度增加，但有上限
-    
-    if (Math.random() < (baseSpawnRate + difficultyFactor) && gameRunning) {
-        spawnEnemy();
+    // 缓慢增加难度
+    difficulty += 0.01;
+    // 每10秒更新难度显示
+    if (Math.floor(gameTime) % 10 === 0 && Math.floor(gameTime) > 0) {
+        updateDifficultyLevel();
     }
-    
-    // 自动发射子弹 - 在低难度时提高发射频率，帮助新手
-    let bulletRate = 0.15;
-    if (difficulty < 30) { // 游戏初期
-        bulletRate = 0.25; // 更高的发射频率
-    }
-    
-    if (Math.random() < bulletRate && gameRunning) {
-        fireBullet();
-    }
-
-    // 更新连击系统
-    if (comboTimer > 0) {
-        comboTimer--;
-        if (comboTimer <= 0) {
-            comboCount = 0;
-            comboMultiplier = 1;
-        }
-    }
-    
-    // 更新护盾
-    if (shieldActive) {
-        shieldTime--;
-        if (shieldTime <= 0) {
-            shieldActive = false;
-        }
-    }
-    
-    // 更新特殊武器冷却
-    if (specialWeaponCooldown > 0) {
-        specialWeaponCooldown--;
-    }
-    
-    // 更新道具
-    for (let i = powerups.length - 1; i >= 0; i--) {
-        const powerup = powerups[i];
-        powerup.y += powerup.speed;
-        powerup.rotation += powerup.rotationSpeed;
-        
-        // 脉动效果
-        powerup.pulseSize += 0.1 * powerup.pulseDirection;
-        if (powerup.pulseSize > 1) powerup.pulseDirection = -1;
-        if (powerup.pulseSize < 0) powerup.pulseDirection = 1;
-        
-        // 检测玩家碰到道具
-        if (
-            player.x < powerup.x + powerup.width &&
-            player.x + player.width > powerup.x &&
-            player.y < powerup.y + powerup.height &&
-            player.y + player.height > powerup.y
-        ) {
-            // 播放道具音效
-            playSound('powerup');
-            
-            // 根据道具类型给予不同奖励
-            switch (powerup.type) {
-                case POWERUP_TYPES.HEALTH:
-                    lives++;
-                    livesElement.textContent = lives;
-                    livesElement.style.textShadow = "0 0 15px rgba(0, 255, 0, 1)";
-                    setTimeout(() => {
-                        livesElement.style.textShadow = "0 0 5px rgba(255, 204, 0, 0.7)";
-                    }, 300);
-                    break;
-                    
-                case POWERUP_TYPES.WEAPON:
-                    // 立即加分
-                    score += 100;
-                    scoreElement.textContent = score;
-                    // 临时提升攻击力，射出更多子弹
-                    for (let j = 0; j < 10; j++) {
-                        setTimeout(() => {
-                            if (gameRunning && !gamePaused) {
-                                fireBullet();
-                            }
-                        }, j * 100);
-                    }
-                    break;
-                    
-                case POWERUP_TYPES.BOMB:
-                    useBomb();
-                    break;
-                    
-                case POWERUP_TYPES.SHIELD:
-                    activateShield();
-                    break;
-                    
-                case POWERUP_TYPES.SCORE:
-                    // 得分加倍
-                    const bonusScore = 200 * comboMultiplier;
-                    score += bonusScore;
-                    scoreElement.textContent = score;
-                    
-                    // 显示浮动分数
-                    const floatingScore = document.createElement('div');
-                    floatingScore.className = 'floating-score';
-                    floatingScore.textContent = `+${bonusScore}`;
-                    floatingScore.style.left = `${powerup.x}px`;
-                    floatingScore.style.top = `${powerup.y}px`;
-                    document.body.appendChild(floatingScore);
-                    
-                    setTimeout(() => {
-                        floatingScore.style.opacity = '0';
-                        floatingScore.style.transform = 'translateY(-50px)';
-                        setTimeout(() => {
-                            document.body.removeChild(floatingScore);
-                        }, 1000);
-                    }, 10);
-                    break;
-                    
-                case POWERUP_TYPES.SPECIAL:
-                    // 触发歼20的特殊武器 - 超级激光束
-                    for (let angle = -0.3; angle <= 0.3; angle += 0.1) {
-                        bullets.push({
-                            x: player.x + player.width / 2 - 2,
-                            y: player.y - 15,
-                            width: 4,
-                            height: 40,
-                            speed: 15,
-                            color: '#9b59b6',
-                            power: 5,
-                            type: 'laser',
-                            angle: angle
-                        });
-                    }
-                    break;
-            }
-            
-            // 更新收集者成就
-            for (let j = 0; j < achievements.length; j++) {
-                if (achievements[j].id === 'collector' && !achievements[j].achieved) {
-                    achievements[j].count++;
-                    if (achievements[j].count >= achievements[j].threshold) {
-                        achievements[j].achieved = true;
-                        score += achievements[j].score;
-                        showAchievementNotification(achievements[j]);
-                    }
-                }
-            }
-            
-            // 为拾取道具创建粒子效果
-            for (let j = 0; j < 15; j++) {
-                const particleColor = getColorForPowerupType(powerup.type);
-                const particle = createParticle(
-                    powerup.x + powerup.width / 2,
-                    powerup.y + powerup.height / 2,
-                    particleColor,
-                    1.5
-                );
-                particles.push(particle);
-            }
-            
-            // 移除道具
-            powerups.splice(i, 1);
-        }
-        
-        // 移除超出屏幕的道具
-        if (powerup.y > canvas.height) {
-            powerups.splice(i, 1);
-        }
-    }
-    
-    // 更新雷达
-    updateRadar();
 }
 
 // 绘制游戏
 function draw() {
     // 清空画布
-    ctx.fillStyle = 'rgba(10, 10, 20, 0.3)';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 绘制背景
+    ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // 绘制星星背景
+    // 绘制星星
     drawStars();
-    
-    // 绘制粒子效果
-    drawParticles();
-    
-    // 绘制玩家 - 歼20战机样式
-    ctx.save();
-    ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
-    
-    // 玩家发光效果
-    const glow = 20 + Math.sin(gameTime * 0.01) * 5;
-    ctx.shadowColor = player.color;
-    ctx.shadowBlur = glow;
-    
-    // 飞机主体颜色 - 灰色调
-    const mainColor = '#7a8ca0';
-    const accentColor = '#4e5d6c';
-    const engineColor = '#f39c12';
-    
-    // 绘制歼20机身主体 - 菱形几何形状
-    ctx.fillStyle = mainColor;
-    
-    // 机身主体
-    ctx.beginPath();
-    // 机头
-    ctx.moveTo(0, -player.height/1.8);
-    // 机翼前缘
-    ctx.lineTo(player.width/1.9, -player.height/4);
-    // 机翼尖端
-    ctx.lineTo(player.width/1.6, player.height/5);
-    // 机翼后缘
-    ctx.lineTo(player.width/3, player.height/2.5);
-    // 机尾
-    ctx.lineTo(0, player.height/3);
-    // 对称部分
-    ctx.lineTo(-player.width/3, player.height/2.5);
-    ctx.lineTo(-player.width/1.6, player.height/5);
-    ctx.lineTo(-player.width/1.9, -player.height/4);
-    ctx.closePath();
-    ctx.fill();
-    
-    // 机头细节 - 前锥形
-    ctx.fillStyle = accentColor;
-    ctx.beginPath();
-    ctx.moveTo(0, -player.height/1.8);
-    ctx.lineTo(player.width/6, -player.height/3);
-    ctx.lineTo(-player.width/6, -player.height/3);
-    ctx.closePath();
-    ctx.fill();
-    
-    // 机腹细节
-    ctx.fillStyle = accentColor;
-    ctx.beginPath();
-    ctx.moveTo(0, -player.height/4);
-    ctx.lineTo(player.width/5, player.height/5);
-    ctx.lineTo(-player.width/5, player.height/5);
-    ctx.closePath();
-    ctx.fill();
-    
-    // 驾驶舱玻璃罩
-    ctx.fillStyle = '#add8e6';
-    ctx.beginPath();
-    ctx.moveTo(0, -player.height/2);
-    ctx.lineTo(player.width/10, -player.height/3);
-    ctx.lineTo(0, -player.height/4);
-    ctx.lineTo(-player.width/10, -player.height/3);
-    ctx.closePath();
-    ctx.fill();
-    
-    // 垂直尾翼
-    ctx.fillStyle = accentColor;
-    ctx.beginPath();
-    ctx.moveTo(0, -player.height/7);
-    ctx.lineTo(0, player.height/4);
-    ctx.lineTo(0, -player.height/10);
-    ctx.closePath();
-    ctx.fill();
-    
-    // 引擎喷口
-    ctx.fillStyle = '#333';
-    ctx.beginPath();
-    ctx.arc(player.width/8, player.height/4, player.width/15, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(-player.width/8, player.height/4, player.width/15, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 引擎火焰
-    const flameSize = 7 + Math.sin(gameTime * 0.1) * 2;
-    
-    // 左引擎火焰
-    const gradient1 = ctx.createRadialGradient(
-        -player.width/8, player.height/4, 0,
-        -player.width/8, player.height/4, flameSize
-    );
-    gradient1.addColorStop(0, '#ff9500');
-    gradient1.addColorStop(0.5, '#ff5500');
-    gradient1.addColorStop(1, 'rgba(255, 0, 0, 0)');
-    
-    ctx.fillStyle = gradient1;
-    ctx.beginPath();
-    ctx.arc(-player.width/8, player.height/4, flameSize, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 右引擎火焰
-    const gradient2 = ctx.createRadialGradient(
-        player.width/8, player.height/4, 0,
-        player.width/8, player.height/4, flameSize
-    );
-    gradient2.addColorStop(0, '#ff9500');
-    gradient2.addColorStop(0.5, '#ff5500');
-    gradient2.addColorStop(1, 'rgba(255, 0, 0, 0)');
-    
-    ctx.fillStyle = gradient2;
-    ctx.beginPath();
-    ctx.arc(player.width/8, player.height/4, flameSize, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 机身细节 - 线条
-    ctx.strokeStyle = '#555';
-    ctx.lineWidth = 0.5;
-    
-    // 翼面线条
-    ctx.beginPath();
-    ctx.moveTo(player.width/2.2, -player.height/5);
-    ctx.lineTo(player.width/2, player.height/6);
-    ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.moveTo(-player.width/2.2, -player.height/5);
-    ctx.lineTo(-player.width/2, player.height/6);
-    ctx.stroke();
-    
-    ctx.restore();
     
     // 绘制子弹
     bullets.forEach(bullet => {
-        ctx.save();
-        ctx.shadowColor = bullet.color;
-        ctx.shadowBlur = 10;
+        // 绘制更加精美的子弹
         ctx.fillStyle = bullet.color;
         
-        switch (bullet.type) {
-            case 'normal':
-                // 普通子弹 - 三角形
-                ctx.beginPath();
-                ctx.moveTo(bullet.x + bullet.width / 2, bullet.y);
-                ctx.lineTo(bullet.x + bullet.width, bullet.y + bullet.height);
-                ctx.lineTo(bullet.x, bullet.y + bullet.height);
-                ctx.closePath();
-                ctx.fill();
-                break;
-                
-            case 'side':
-                // 侧弹 - 圆形
-                ctx.beginPath();
-                ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, bullet.width / 2, 0, Math.PI * 2);
-                ctx.fill();
-                break;
-                
-            case 'homing':
-                // 跟踪弹 - 小箭头
-                ctx.translate(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2);
-                ctx.rotate(bullet.angle);
-                
-                ctx.beginPath();
-                ctx.moveTo(0, -bullet.height / 2);
-                ctx.lineTo(bullet.width / 2, bullet.height / 2);
-                ctx.lineTo(-bullet.width / 2, bullet.height / 2);
-                ctx.closePath();
-                ctx.fill();
-                break;
-                
-            case 'laser':
-                // 激光 - 发光棱柱
-                const gradient = ctx.createLinearGradient(
-                    bullet.x, bullet.y, 
-                    bullet.x, bullet.y + bullet.height
-                );
-                gradient.addColorStop(0, '#9b59b6');
-                gradient.addColorStop(0.5, '#8e44ad');
-                gradient.addColorStop(1, '#9b59b6');
-                
-                ctx.fillStyle = gradient;
-                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-                
-                // 激光发光内核
-                ctx.fillStyle = '#ecf0f1';
-                ctx.fillRect(bullet.x + bullet.width / 2 - 1, bullet.y, 2, bullet.height);
-                break;
-                
-            case 'missile':
-                // 导弹 - 小火箭
-                ctx.translate(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2);
-                ctx.rotate(bullet.angle);
-                
-                // 导弹主体
-                ctx.fillStyle = '#e74c3c';
-                ctx.beginPath();
-                ctx.moveTo(0, -bullet.height / 2);
-                ctx.lineTo(bullet.width / 2, bullet.height / 2);
-                ctx.lineTo(-bullet.width / 2, bullet.height / 2);
-                ctx.closePath();
-                ctx.fill();
-                
-                // 尾焰
-                const missileGradient = ctx.createRadialGradient(
-                    0, bullet.height / 2, 0,
-                    0, bullet.height / 2, bullet.width
-                );
-                missileGradient.addColorStop(0, '#f39c12');
-                missileGradient.addColorStop(0.5, '#e67e22');
-                missileGradient.addColorStop(1, 'rgba(231, 76, 60, 0)');
-                
-                ctx.fillStyle = missileGradient;
-                ctx.beginPath();
-                ctx.arc(0, bullet.height / 2, bullet.width / 2 + Math.random() * 2, 0, Math.PI * 2);
-                ctx.fill();
-                break;
-        }
+        // 创建发光效果
+        const gradient = ctx.createRadialGradient(
+            bullet.x + bullet.width/2, 
+            bullet.y + bullet.height/2, 
+            0, 
+            bullet.x + bullet.width/2, 
+            bullet.y + bullet.height/2, 
+            bullet.width
+        );
+        gradient.addColorStop(0, 'white');
+        gradient.addColorStop(0.3, bullet.color);
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
         
-        ctx.restore();
+        // 绘制子弹光晕
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(bullet.x + bullet.width/2, bullet.y + bullet.height/2, bullet.width, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 绘制子弹主体
+        ctx.fillStyle = 'white';
+        ctx.fillRect(bullet.x + bullet.width/2 - 2, bullet.y, 4, bullet.height);
     });
     
     // 绘制敌机
     enemies.forEach(enemy => {
-        ctx.save();
-        ctx.translate(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
-        ctx.rotate(enemy.rotation);
+        // 根据敌机类型绘制不同形状
+        ctx.fillStyle = enemy.color;
         
-        // 敌机发光效果
-        ctx.shadowColor = enemy.color;
-        ctx.shadowBlur = 15;
-        
-        // 根据敌机类型绘制不同样式
         switch(enemy.type) {
-            case 0: // 轻型战机 - F-16风格
-                // 机身
-                ctx.fillStyle = '#a0a0a0';
+            case 0: // 轻型战机 - 小三角形
                 ctx.beginPath();
-                ctx.moveTo(0, -enemy.height / 2);
-                ctx.lineTo(enemy.width / 4, -enemy.height / 4);
-                ctx.lineTo(enemy.width / 2.5, enemy.height / 3);
-                ctx.lineTo(0, enemy.height / 2);
-                ctx.lineTo(-enemy.width / 2.5, enemy.height / 3);
-                ctx.lineTo(-enemy.width / 4, -enemy.height / 4);
+                ctx.moveTo(enemy.x + enemy.width/2, enemy.y);
+                ctx.lineTo(enemy.x, enemy.y + enemy.height);
+                ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height);
                 ctx.closePath();
                 ctx.fill();
                 
-                // 驾驶舱
-                ctx.fillStyle = '#87ceeb';
+                // 绘制机翼
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
                 ctx.beginPath();
-                ctx.ellipse(0, -enemy.height / 6, enemy.width / 8, enemy.height / 6, 0, 0, Math.PI * 2);
+                ctx.moveTo(enemy.x, enemy.y + enemy.height * 0.7);
+                ctx.lineTo(enemy.x - enemy.width * 0.3, enemy.y + enemy.height * 0.5);
+                ctx.lineTo(enemy.x, enemy.y + enemy.height * 0.4);
+                ctx.closePath();
                 ctx.fill();
                 
-                // 垂直尾翼
-                ctx.fillStyle = '#7d7d7d';
                 ctx.beginPath();
-                ctx.moveTo(0, 0);
-                ctx.lineTo(0, -enemy.height / 3);
-                ctx.lineTo(enemy.width / 10, 0);
+                ctx.moveTo(enemy.x + enemy.width, enemy.y + enemy.height * 0.7);
+                ctx.lineTo(enemy.x + enemy.width * 1.3, enemy.y + enemy.height * 0.5);
+                ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height * 0.4);
                 ctx.closePath();
                 ctx.fill();
                 break;
                 
-            case 1: // 中型战机 - F/A-18风格
-                // 机身主体
-                ctx.fillStyle = '#d3d3d3';
+            case 1: // 中型战机 - 五边形
                 ctx.beginPath();
-                ctx.moveTo(0, -enemy.height / 2);
-                ctx.bezierCurveTo(
-                    enemy.width / 3, -enemy.height / 3,
-                    enemy.width / 2, enemy.height / 4,
-                    enemy.width / 4, enemy.height / 2
-                );
-                ctx.lineTo(-enemy.width / 4, enemy.height / 2);
-                ctx.bezierCurveTo(
-                    -enemy.width / 2, enemy.height / 4,
-                    -enemy.width / 3, -enemy.height / 3,
-                    0, -enemy.height / 2
-                );
+                ctx.moveTo(enemy.x + enemy.width/2, enemy.y);
+                ctx.lineTo(enemy.x, enemy.y + enemy.height * 0.4);
+                ctx.lineTo(enemy.x, enemy.y + enemy.height * 0.8);
+                ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height * 0.8);
+                ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height * 0.4);
                 ctx.closePath();
                 ctx.fill();
                 
-                // 双垂直尾翼
-                ctx.fillStyle = '#a9a9a9';
-                ctx.beginPath();
-                ctx.moveTo(enemy.width / 6, enemy.height / 6);
-                ctx.lineTo(enemy.width / 6, -enemy.height / 6);
-                ctx.lineTo(enemy.width / 3, enemy.height / 6);
-                ctx.closePath();
-                ctx.fill();
-                
-                ctx.beginPath();
-                ctx.moveTo(-enemy.width / 6, enemy.height / 6);
-                ctx.lineTo(-enemy.width / 6, -enemy.height / 6);
-                ctx.lineTo(-enemy.width / 3, enemy.height / 6);
-                ctx.closePath();
-                ctx.fill();
-                
-                // 驾驶舱
-                ctx.fillStyle = '#add8e6';
-                ctx.beginPath();
-                ctx.ellipse(0, -enemy.height / 4, enemy.width / 6, enemy.height / 8, 0, 0, Math.PI * 2);
-                ctx.fill();
+                // 添加细节
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(enemy.x + enemy.width * 0.3, enemy.y + enemy.height * 0.3, 
+                            enemy.width * 0.4, enemy.height * 0.4);
                 break;
                 
-            case 2: // 重型战机 - 轰炸机风格
-                // 机身
-                ctx.fillStyle = '#696969';
+            case 2: // 重型战机 - 六边形
                 ctx.beginPath();
-                ctx.moveTo(0, -enemy.height / 2);
-                ctx.lineTo(enemy.width / 2, 0);
-                ctx.lineTo(enemy.width / 3, enemy.height / 2);
-                ctx.lineTo(-enemy.width / 3, enemy.height / 2);
-                ctx.lineTo(-enemy.width / 2, 0);
+                ctx.moveTo(enemy.x + enemy.width * 0.3, enemy.y);
+                ctx.lineTo(enemy.x + enemy.width * 0.7, enemy.y);
+                ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height * 0.5);
+                ctx.lineTo(enemy.x + enemy.width * 0.7, enemy.y + enemy.height);
+                ctx.lineTo(enemy.x + enemy.width * 0.3, enemy.y + enemy.height);
+                ctx.lineTo(enemy.x, enemy.y + enemy.height * 0.5);
                 ctx.closePath();
                 ctx.fill();
                 
-                // 机翼
-                ctx.fillStyle = '#808080';
+                // 添加引擎效果
+                ctx.fillStyle = 'rgba(255,100,0,0.8)';
                 ctx.beginPath();
-                ctx.moveTo(-enemy.width / 3, 0);
-                ctx.lineTo(-enemy.width / 1.2, enemy.height / 4);
-                ctx.lineTo(-enemy.width / 2, enemy.height / 4);
-                ctx.lineTo(-enemy.width / 6, 0);
-                ctx.closePath();
+                ctx.arc(enemy.x + enemy.width * 0.3, enemy.y + enemy.height * 0.7, 
+                      enemy.width * 0.1, 0, Math.PI * 2);
                 ctx.fill();
                 
                 ctx.beginPath();
-                ctx.moveTo(enemy.width / 3, 0);
-                ctx.lineTo(enemy.width / 1.2, enemy.height / 4);
-                ctx.lineTo(enemy.width / 2, enemy.height / 4);
-                ctx.lineTo(enemy.width / 6, 0);
-                ctx.closePath();
-                ctx.fill();
-                
-                // 驾驶舱
-                ctx.fillStyle = '#b0c4de';
-                ctx.beginPath();
-                ctx.arc(0, -enemy.height / 4, enemy.width / 8, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // 引擎
-                ctx.fillStyle = '#ff4500';
-                ctx.beginPath();
-                ctx.arc(enemy.width / 4, enemy.height / 3, enemy.width / 12, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.beginPath();
-                ctx.arc(-enemy.width / 4, enemy.height / 3, enemy.width / 12, 0, Math.PI * 2);
+                ctx.arc(enemy.x + enemy.width * 0.7, enemy.y + enemy.height * 0.7, 
+                      enemy.width * 0.1, 0, Math.PI * 2);
                 ctx.fill();
                 break;
         }
         
-        // 敌机生命条
+        // 绘制敌机生命值
         if (enemy.health < enemy.maxHealth) {
+            // 背景
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(enemy.x, enemy.y - 10, enemy.width, 5);
+            
+            // 血条
             const healthPercent = enemy.health / enemy.maxHealth;
-            ctx.fillStyle = `hsl(${healthPercent * 120}, 100%, 50%)`;
-            ctx.fillRect(-enemy.width / 2, -enemy.height / 2 - 10, enemy.width * healthPercent, 5);
-            ctx.strokeStyle = 'white';
-            ctx.strokeRect(-enemy.width / 2, -enemy.height / 2 - 10, enemy.width, 5);
+            ctx.fillStyle = healthPercent > 0.5 ? 'lime' : 'red';
+            ctx.fillRect(enemy.x, enemy.y - 10, enemy.width * healthPercent, 5);
         }
-        
-        ctx.restore();
     });
     
-    // 绘制爆炸效果
-    drawParticles();
-
-    // 绘制道具
-    powerups.forEach(powerup => {
-        ctx.save();
-        ctx.translate(powerup.x + powerup.width / 2, powerup.y + powerup.height / 2);
-        ctx.rotate(powerup.rotation);
-        
-        // 道具发光效果
-        const color = getColorForPowerupType(powerup.type);
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 15;
-        
-        // 道具轮廓
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, powerup.width / 2, 0, Math.PI * 2);
-        ctx.stroke();
-        
-        // 道具内部
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(0, 0, powerup.width / 2 - 2, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // 根据道具类型绘制不同图标
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.font = '16px Arial';
-        
-        switch (powerup.type) {
-            case POWERUP_TYPES.HEALTH:
-                ctx.fillText('♥', 0, 0);
-                break;
-            case POWERUP_TYPES.WEAPON:
-                ctx.fillText('⚔', 0, 0);
-                break;
-            case POWERUP_TYPES.BOMB:
-                ctx.fillText('💣', 0, 0);
-                break;
-            case POWERUP_TYPES.SHIELD:
-                ctx.fillText('🛡', 0, 0);
-                break;
-            case POWERUP_TYPES.SCORE:
-                ctx.fillText('⭐', 0, 0);
-                break;
-            case POWERUP_TYPES.SPECIAL:
-                ctx.fillText('⚡', 0, 0);
-                break;
-        }
-        
-        // 脉动光环
-        ctx.globalAlpha = 0.3 - powerup.pulseSize * 0.3;
-        ctx.beginPath();
-        ctx.arc(0, 0, powerup.width / 2 + powerup.pulseSize * 10, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.restore();
-    });
+    // 绘制玩家飞机 - 使用三角形
+    ctx.fillStyle = player.color;
     
-    // 绘制护盾（如果激活）
-    if (shieldActive) {
-        ctx.save();
-        
-        // 创建环状渐变
-        const gradient = ctx.createRadialGradient(
-            player.x + player.width / 2, player.y + player.height / 2, player.width / 2,
-            player.x + player.width / 2, player.y + player.height / 2, player.width * 1.2
-        );
-        gradient.addColorStop(0, 'rgba(100, 200, 255, 0)');
-        gradient.addColorStop(0.5, 'rgba(100, 200, 255, 0.3)');
-        gradient.addColorStop(0.8, 'rgba(100, 200, 255, 0.1)');
-        gradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
-        
-        // 绘制护盾
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(
-            player.x + player.width / 2, 
-            player.y + player.height / 2, 
-            player.width * 1.2, 
-            0, 
-            Math.PI * 2
-        );
-        ctx.fill();
-        
-        // 绘制护盾外环
-        ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(
-            player.x + player.width / 2, 
-            player.y + player.height / 2, 
-            player.width * 1.2, 
-            0, 
-            Math.PI * 2
-        );
-        ctx.stroke();
-        
-        ctx.restore();
-    }
+    // 绘制机身
+    ctx.beginPath();
+    ctx.moveTo(player.x + player.width/2, player.y);
+    ctx.lineTo(player.x, player.y + player.height);
+    ctx.lineTo(player.x + player.width, player.y + player.height);
+    ctx.closePath();
+    ctx.fill();
     
-    // 绘制连击信息
-    if (comboCount > 1) {
-        ctx.save();
-        
-        ctx.font = '20px Arial';
-        ctx.fillStyle = `hsl(${Math.min(comboCount * 5, 360)}, 100%, 60%)`;
-        ctx.textAlign = 'center';
-        ctx.shadowColor = 'black';
-        ctx.shadowBlur =.5;
-        
-        ctx.fillText(`${comboCount} 连击! x${comboMultiplier}`, canvas.width / 2, 50);
-        
-        ctx.restore();
-    }
+    // 绘制机翼
+    ctx.fillStyle = '#1a6ba0';
+    ctx.beginPath();
+    ctx.moveTo(player.x - player.width * 0.2, player.y + player.height * 0.7);
+    ctx.lineTo(player.x + player.width * 1.2, player.y + player.height * 0.7);
+    ctx.lineTo(player.x + player.width/2, player.y + player.height * 0.9);
+    ctx.closePath();
+    ctx.fill();
     
-    // 绘制炸弹冷却
-    if (specialWeaponCooldown > 0) {
-        ctx.save();
-        
-        const cooldownPercent = specialWeaponCooldown / 300;
-        const cooldownAngle = cooldownPercent * Math.PI * 2;
-        
-        ctx.fillStyle = 'rgba(50, 50, 50, 0.5)';
+    // 绘制驾驶舱
+    ctx.fillStyle = 'rgba(200, 230, 255, 0.7)';
+    ctx.beginPath();
+    ctx.arc(player.x + player.width/2, player.y + player.height * 0.4, 
+            player.width * 0.15, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 绘制引擎火焰
+    if (gameRunning && !gamePaused) {
+        ctx.fillStyle = 'orange';
         ctx.beginPath();
-        ctx.arc(30, canvas.height - 30, 20, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.fillStyle = 'rgba(255, 100, 100, 0.7)';
-        ctx.beginPath();
-        ctx.moveTo(30, canvas.height - 30);
-        ctx.arc(30, canvas.height - 30, 20, -Math.PI / 2, -Math.PI / 2 + cooldownAngle);
+        ctx.moveTo(player.x + player.width * 0.3, player.y + player.height);
+        ctx.lineTo(player.x + player.width * 0.5, player.y + player.height + Math.random() * 15 + 5);
+        ctx.lineTo(player.x + player.width * 0.7, player.y + player.height);
         ctx.closePath();
         ctx.fill();
+    }
+    
+    // 绘制护盾效果
+    if (shieldActive) {
+        ctx.strokeStyle = 'rgba(0, 200, 255, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(player.x + player.width/2, player.y + player.height/2, 
+                player.width * 0.8, 0, Math.PI * 2);
+        ctx.stroke();
         
-        ctx.font = '12px Arial';
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('炸弹', 30, canvas.height - 30);
+        // 添加光晕效果
+        const shieldGradient = ctx.createRadialGradient(
+            player.x + player.width/2, player.y + player.height/2, 0,
+            player.x + player.width/2, player.y + player.height/2, player.width
+        );
+        shieldGradient.addColorStop(0, 'rgba(0, 200, 255, 0)');
+        shieldGradient.addColorStop(0.7, 'rgba(0, 200, 255, 0.1)');
+        shieldGradient.addColorStop(1, 'rgba(0, 200, 255, 0.2)');
         
-        ctx.restore();
+        ctx.fillStyle = shieldGradient;
+        ctx.beginPath();
+        ctx.arc(player.x + player.width/2, player.y + player.height/2, 
+                player.width, 0, Math.PI * 2);
+        ctx.fill();
     }
 }
 
 // 游戏主循环
 function gameLoop(time) {
     if (!gamePaused && gameRunning) {
+        // 计算游戏时间
+        const deltaTime = time - lastTime;
+        gameTime += deltaTime / 1000;
+        
+        // 更新FPS
+        updateFPS(time);
+        
+        // 更新游戏时间显示
+        const minutes = Math.floor(gameTime / 60);
+        const seconds = Math.floor(gameTime % 60);
+        document.getElementById('gameTime').textContent = 
+            `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        // 更新和绘制游戏
         update(time);
         draw();
+        
+        lastTime = time;
     }
     animationId = requestAnimationFrame(gameLoop);
 }
-
-// 游戏结束
-function gameOver() {
-    gameRunning = false;
-    cancelAnimationFrame(animationId);
-    
-    // 停止背景音乐，播放游戏结束音效
-    sounds.background && sounds.background.pause && sounds.background.pause();
-    playSound('gameOver');
-    
-    // 显示游戏结束画面
-    finalScoreElement.textContent = score;
-    gameOverScreen.style.display = 'flex';
-    gameOverScreen.style.opacity = '1';
-    gameOverScreen.style.pointerEvents = 'auto';
-    
-    // 大爆炸效果
-    createDOMExplosion(
-        canvas.width / 2,
-        canvas.height / 2,
-        300,
-        'rgba(255, 255, 0, 0.8)'
-    );
-    
-    // 屏幕震动
-    shakeScreen();
-}
-
-// 隐藏游戏结束画面
-function hideGameOverScreen() {
-    gameOverScreen.style.opacity = '0';
-    gameOverScreen.style.pointerEvents = 'none';
-}
-
-// 开始游戏
-function startGame() {
-    console.log("游戏开始");
-    resizeCanvas();
-    init();
-    gameRunning = true;
-    gamePaused = false;
-    startButton.textContent = '重新开始';
-    pauseButton.textContent = '暂停';
-    lastTime = performance.now();
-    if (animationId) {
-        cancelAnimationFrame(animationId);
-    }
-    
-    // 隐藏游戏结束画面
-    hideGameOverScreen();
-    
-    // 播放音效
-    if (soundEnabled && audioContext) {
-        unlockAudio();
-        playSound('levelUp');
-    }
-    
-    gameLoop(lastTime);
-}
-
-// 暂停/继续游戏
-function togglePause() {
-    if (gameRunning) {
-        gamePaused = !gamePaused;
-        pauseButton.textContent = gamePaused ? '继续' : '暂停';
-        
-        // 播放音效
-        if (soundEnabled && audioContext) {
-            playSound(gamePaused ? 'hit' : 'powerup');
-        }
-        
-        if (!gamePaused) {
-            lastTime = performance.now();
-        }
-    }
-}
-
-// 事件监听
-startButton.addEventListener('click', function() {
-    console.log("点击了开始按钮");
-    startGame();
-});
-
-pauseButton.addEventListener('click', function() {
-    console.log("点击了暂停按钮");
-    togglePause();
-});
 
 // 键盘控制
 window.addEventListener('keydown', (e) => {
@@ -2131,11 +734,7 @@ window.addEventListener('keydown', (e) => {
         e.preventDefault();
     }
     if (e.code === 'Space') {
-        fireBullet();
-        e.preventDefault();
-    }
-    if (e.code === 'KeyB') {
-        useBomb();
+        keys.Space = true;
         e.preventDefault();
     }
 });
@@ -2145,223 +744,29 @@ window.addEventListener('keyup', (e) => {
         e.code === 'ArrowUp' || e.code === 'ArrowDown') {
         keys[e.code] = false;
     }
+    if (e.code === 'Space') {
+        keys.Space = false;
+    }
 });
 
-// 创建道具
-function createPowerup(x, y, type) {
-    return {
-        x: x,
-        y: y,
-        width: 25,
-        height: 25,
-        speed: 1 + Math.random() * 1.5,
-        type: type,
-        rotation: 0,
-        rotationSpeed: (Math.random() - 0.5) * 0.1,
-        pulseSize: 0,
-        pulseDirection: 1
-    };
-}
-
-// 随机掉落道具
-function dropPowerup(x, y) {
-    if (Math.random() < 0.3) { // 30%的几率掉落道具
-        const typeRandom = Math.random();
-        let powerupType;
-        
-        if (typeRandom < 0.3) {
-            powerupType = POWERUP_TYPES.SCORE; // 30%几率掉落分数
-        } else if (typeRandom < 0.5) {
-            powerupType = POWERUP_TYPES.WEAPON; // 20%几率掉落武器升级
-        } else if (typeRandom < 0.7) {
-            powerupType = POWERUP_TYPES.HEALTH; // 20%几率掉落生命
-        } else if (typeRandom < 0.85) {
-            powerupType = POWERUP_TYPES.SHIELD; // 15%几率掉落护盾
-        } else if (typeRandom < 0.95) {
-            powerupType = POWERUP_TYPES.BOMB; // 10%几率掉落炸弹
-        } else {
-            powerupType = POWERUP_TYPES.SPECIAL; // 5%几率掉落特殊武器
-        }
-        
-        powerups.push(createPowerup(x, y, powerupType));
-    }
-}
-
-// 使用炸弹清屏
-function useBomb() {
-    if (specialWeaponCooldown <= 0) {
-        // 播放炸弹音效
-        playSound('bomb');
-        
-        // 创建炸弹爆炸效果
-        createExplosion(canvas.width / 2, canvas.height / 2, '#ff0000', 200);
-        
-        // 摧毁所有敌机
-        let destroyedCount = 0;
-        for (let i = enemies.length - 1; i >= 0; i--) {
-            destroyedCount++;
-            createExplosion(
-                enemies[i].x + enemies[i].width / 2,
-                enemies[i].y + enemies[i].height / 2,
-                enemies[i].color,
-                15
-            );
-            
-            // 得分增加
-            score += 5 * enemies[i].maxHealth;
-            killCount++;
-        }
-        
-        // 清空敌机数组
-        enemies = [];
-        
-        // 更新分数显示
-        scoreElement.textContent = score;
-        killCountElement.textContent = `击毁: ${killCount}`;
-        
-        // 更新炸弹成就
-        for (let i = 0; i < achievements.length; i++) {
-            if (achievements[i].id === 'bomber' && !achievements[i].achieved) {
-                achievements[i].count++;
-                if (achievements[i].count >= achievements[i].threshold) {
-                    achievements[i].achieved = true;
-                    score += achievements[i].score;
-                    showAchievementNotification(achievements[i]);
-                }
-            }
-        }
-        
-        // 设置冷却时间
-        specialWeaponCooldown = 300;  // 帧数计时
-        
-        // 震动屏幕效果
-        canvas.style.boxShadow = "0 0 30px rgba(255, 0, 0, 0.8)";
-        setTimeout(() => {
-            canvas.style.boxShadow = "0 0 15px rgba(0, 100, 255, 0.6)";
-        }, 300);
-        
-        return destroyedCount;
-    }
-    return 0;
-}
-
-// 激活护盾
-function activateShield() {
-    // 播放护盾音效
-    playSound('shield');
-    
-    shieldActive = true;
-    shieldTime = 600;  // 10秒持续时间（60帧/秒）
-}
-
-// 显示成就通知
-function showAchievementNotification(achievement) {
-    // 播放成就音效
-    playSound('achievement');
-    
-    // 创建通知元素
-    const notification = document.createElement('div');
-    notification.className = 'achievement-notification';
-    notification.innerHTML = `
-        <div class="achievement-icon">🏆</div>
-        <div class="achievement-content">
-            <div class="achievement-title">${achievement.name}</div>
-            <div class="achievement-desc">${achievement.description}</div>
-            <div class="achievement-reward">+${achievement.score}分</div>
-        </div>
-    `;
-    
-    // 添加到DOM
-    document.body.appendChild(notification);
-    
-    // 动画效果
-    setTimeout(() => {
-        notification.classList.add('show');
-    }, 10);
-    
-    // 一段时间后移除
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => {
-            document.body.removeChild(notification);
-        }, 500);
-    }, 3000);
-}
-
-// 检查成就
-function checkAchievements() {
-    let achievementUnlocked = false;
-    
-    // 检查每个成就
-    for (let i = 0; i < achievements.length; i++) {
-        const achievement = achievements[i];
-        if (achievement.achieved) continue;
-        
-        switch (achievement.id) {
-            case 'firstkill':
-                if (killCount >= 1) {
-                    achievement.achieved = true;
-                    achievementUnlocked = true;
-                }
-                break;
-            case 'kill10':
-            case 'kill50':
-            case 'kill100':
-                achievement.count = killCount;
-                if (achievement.count >= achievement.threshold) {
-                    achievement.achieved = true;
-                    achievementUnlocked = true;
-                }
-                break;
-            case 'combo10':
-                if (comboCount >= achievement.threshold) {
-                    achievement.achieved = true;
-                    achievementUnlocked = true;
-                }
-                break;
-            case 'score1000':
-            case 'score5000':
-                if (score >= achievement.threshold) {
-                    achievement.achieved = true;
-                    achievementUnlocked = true;
-                }
-                break;
-            case 'survivor':
-                // 幸存者成就使用游戏时间（秒）而不是毫秒
-                if (gameElapsedTime >= achievement.threshold) {
-                    achievement.achieved = true;
-                    achievementUnlocked = true;
-                }
-                break;
-        }
-        
-        if (achievement.achieved) {
-            score += achievement.score;
-            scoreElement.textContent = score;
-            showAchievementNotification(achievement);
-        }
+// 更新FPS计数
+function updateFPS(time) {
+    if (!lastFpsTime) {
+        lastFpsTime = time;
+        fps = 0;
+        return;
     }
     
-    return achievementUnlocked;
-}
-
-// 获取道具颜色
-function getColorForPowerupType(type) {
-    switch (type) {
-        case POWERUP_TYPES.HEALTH:
-            return '#e74c3c'; // 红色
-        case POWERUP_TYPES.WEAPON:
-            return '#3498db'; // 蓝色
-        case POWERUP_TYPES.BOMB:
-            return '#e67e22'; // 橙色
-        case POWERUP_TYPES.SHIELD:
-            return '#2ecc71'; // 绿色
-        case POWERUP_TYPES.SCORE:
-            return '#f1c40f'; // 黄色
-        case POWERUP_TYPES.SPECIAL:
-            return '#9b59b6'; // 紫色
-        default:
-            return 'white';
+    frameCount++;
+    
+    // 每秒更新一次FPS值
+    if (time - lastFpsTime > 1000) {
+        fps = Math.round((frameCount * 1000) / (time - lastFpsTime));
+        frameCount = 0;
+        lastFpsTime = time;
+        
+        // 更新FPS显示
+        fpsElement.textContent = `FPS: ${fps}`;
     }
 }
 
@@ -2412,93 +817,188 @@ function updateDifficultyLevel() {
     difficultyElement.classList.add(levelClass);
 }
 
-// 添加创建DOM爆炸效果功能
-function createDOMExplosion(x, y, size, color) {
-    const explosion = document.createElement('div');
-    explosion.className = 'explosion';
-    explosion.style.left = `${x}px`;
-    explosion.style.top = `${y}px`;
-    explosion.style.width = `${size}px`;
-    explosion.style.height = `${size}px`;
+// 初始化游戏
+function init() {
+    // 初始化游戏状态
+    score = 0;
+    lives = 3;
+    gameTime = 0;
+    killCount = 0;
     
-    // 使用自定义颜色
-    if (color) {
-        explosion.style.backgroundImage = `radial-gradient(circle, ${color} 0%, rgba(255,100,0,0.5) 30%, rgba(255,0,0,0) 70%)`;
+    // 重置玩家位置
+    player.x = canvas.width / 2 - player.width / 2;
+    player.y = canvas.height - player.height - 20;
+    
+    // 清空所有游戏对象
+    enemies = [];
+    bullets = [];
+    particles = [];
+    powerups = [];
+    explosions = [];
+    
+    // 重置游戏状态
+    gameState = 'playing';
+    difficultyLevel = 1;
+    
+    // 难度值保持用户选择的难度，不重置
+    
+    // 更新得分显示
+    scoreElement.textContent = score;
+    livesElement.textContent = lives;
+    killCountElement.textContent = `击毁: ${killCount}`;
+    
+    // 创建星空背景
+    stars = [];
+    createStars();
+    
+    // 重置道具相关
+    powerupCounter = 0;
+    specialWeaponCooldown = 0;
+    shieldActive = false;
+    shieldTime = 0;
+    
+    // 重置combo计数
+    comboCount = 0;
+    lastComboTime = 0;
+    
+    // 隐藏游戏结束画面
+    hideGameOverScreen();
+    
+    // 更新难度级别显示
+    updateDifficultyLevel();
+}
+
+// 开始游戏
+function startGame() {
+    console.log("游戏开始");
+    resizeCanvas();
+    init();
+    gameRunning = true;
+    gamePaused = false;
+    startButton.textContent = '重新开始';
+    pauseButton.textContent = '暂停';
+    lastTime = performance.now();
+    if (animationId) {
+        cancelAnimationFrame(animationId);
     }
     
-    document.querySelector('.canvas-container').appendChild(explosion);
+    // 隐藏游戏结束画面
+    hideGameOverScreen();
     
-    // 存储爆炸元素以便清理
-    explosionElements.push(explosion);
+    // 播放音效
+    if (soundEnabled && audioContext) {
+        unlockAudio();
+        playSound('levelUp');
+    }
     
-    // 在动画结束后移除元素
-    setTimeout(() => {
-        if (explosion.parentNode) {
-            explosion.parentNode.removeChild(explosion);
-        }
-        const index = explosionElements.indexOf(explosion);
-        if (index !== -1) {
-            explosionElements.splice(index, 1);
-        }
-    }, 500);
+    gameLoop(lastTime);
 }
 
-// 清理所有爆炸效果
-function clearExplosions() {
-    explosionElements.forEach(explosion => {
-        if (explosion.parentNode) {
-            explosion.parentNode.removeChild(explosion);
-        }
-    });
-    explosionElements = [];
-}
-
-// 为雷达添加敌机点
-function updateRadar() {
-    // 清除现有的雷达点
-    const existingDots = radarContainer.querySelectorAll('.radar-dot');
-    existingDots.forEach(dot => dot.remove());
-    
-    // 为每个敌机添加一个点
-    enemies.forEach(enemy => {
-        const radarX = (enemy.x / canvas.width) * 100;
-        const radarY = (enemy.y / canvas.height) * 100;
+// 暂停游戏
+function togglePause() {
+    if (gameRunning) {
+        gamePaused = !gamePaused;
+        pauseButton.textContent = gamePaused ? '继续' : '暂停';
         
-        const dot = document.createElement('div');
-        dot.className = 'radar-dot';
-        dot.style.left = `${radarX}%`;
-        dot.style.top = `${radarY}%`;
+        if (!gamePaused) {
+            lastTime = performance.now();
+        }
+    }
+}
+
+// 隐藏游戏结束画面
+function hideGameOverScreen() {
+    gameOverScreen.style.opacity = '0';
+    gameOverScreen.style.pointerEvents = 'none';
+}
+
+// 屏幕震动效果，添加震动强度参数
+function shakeScreen(intensity = 0.5) {
+    let shakeAmount = 15 * intensity; // 根据强度调整震动幅度
+    let shakeDuration = 400 * intensity; // 根据强度调整震动时长
+    let shakeStartTime = Date.now();
+    
+    // 设置震动间隔
+    let shakeInterval = setInterval(() => {
+        let elapsed = Date.now() - shakeStartTime;
+        if (elapsed >= shakeDuration) {
+            clearInterval(shakeInterval);
+            // 重置画布位置
+            canvas.style.transform = 'translate(0px, 0px)';
+            return;
+        }
         
-        radarContainer.appendChild(dot);
+        // 计算衰减系数
+        let factor = (shakeDuration - elapsed) / shakeDuration;
+        let currentShake = shakeAmount * factor;
+        
+        // 随机偏移画布
+        let offsetX = (Math.random() - 0.5) * currentShake * 2;
+        let offsetY = (Math.random() - 0.5) * currentShake * 2;
+        
+        canvas.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+    }, 16); // 约60fps
+}
+
+// 游戏结束
+function gameOver() {
+    console.log("游戏结束");
+    gameRunning = false;
+    
+    // 显示最终得分
+    finalScoreElement.textContent = score;
+    
+    // 显示游戏结束画面
+    gameOverScreen.style.display = 'flex';
+    gameOverScreen.style.opacity = '1';
+    gameOverScreen.style.pointerEvents = 'auto';
+    
+    // 大爆炸效果
+    shakeScreen();
+}
+
+// 显示难度选择界面
+function showDifficultySelectScreen() {
+    difficultySelectScreen.style.display = 'flex';
+    difficultySelectScreen.style.opacity = '1';
+    difficultySelectScreen.style.pointerEvents = 'auto';
+}
+
+// 隐藏难度选择界面
+function hideDifficultySelectScreen() {
+    difficultySelectScreen.style.opacity = '0';
+    difficultySelectScreen.style.pointerEvents = 'none';
+}
+
+// 初始化难度选择界面的事件监听
+function initDifficultySelection() {
+    const difficultyOptions = document.querySelectorAll('.difficulty-option');
+    
+    difficultyOptions.forEach(option => {
+        option.addEventListener('mouseover', function() {
+            const diffValue = parseInt(this.getAttribute('data-difficulty'));
+            updateDifficultyDescription(diffValue);
+        });
+        
+        option.addEventListener('click', function() {
+            // 移除其他按钮的选中状态
+            difficultyOptions.forEach(opt => opt.classList.remove('selected'));
+            
+            // 为当前按钮添加选中状态
+            this.classList.add('selected');
+            
+            // 保存所选难度
+            selectedDifficulty = parseInt(this.getAttribute('data-difficulty'));
+            
+            // 延迟一小段时间后开始游戏，让用户看到选中效果
+            setTimeout(() => {
+                startGameWithSelectedDifficulty();
+            }, 500);
+        });
     });
 }
 
-// 显示击中闪烁
-function showHitFlash() {
-    hitFlashElement.style.display = 'block';
-    hitFlashElement.style.animation = 'none';
-    
-    // 触发重新计算样式
-    void hitFlashElement.offsetWidth;
-    
-    hitFlashElement.style.animation = 'hitFlash 0.2s ease-out';
-    
-    setTimeout(() => {
-        hitFlashElement.style.display = 'none';
-    }, 200);
-}
-
-// 屏幕震动效果
-function shakeScreen() {
-    const container = document.querySelector('.game-container');
-    container.classList.add('screen-shake');
-    
-    setTimeout(() => {
-        container.classList.remove('screen-shake');
-    }, 500);
-}
-
-// 显示升级动画
+// 显示等级提升动画
 function showLevelUpAnimation(level) {
     if (levelUpAnimationActive) return;
     
@@ -2535,57 +1035,52 @@ function showLevelUpAnimation(level) {
     }, 3000);
 }
 
-// 添加重启按钮监听器
-restartButton.addEventListener('click', function() {
-    console.log("点击了重新开始按钮");
-    startGame();
-});
-
-// 在createGameOverSound函数中添加游戏结束音效
-function createGameOverSound() {
-    // 创建低频的游戏结束音效
-    let oscillator = audioContext.createOscillator();
-    let gainNode = audioContext.createGain();
+// 根据所选难度更新描述文本
+function updateDifficultyDescription(diffValue) {
+    let description = "";
     
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(220, audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(110, audioContext.currentTime + 1.5);
+    switch(diffValue) {
+        case 0:
+            description = "新手模式：适合初次游戏的玩家，敌人数量少，速度慢，游戏节奏轻松。";
+            break;
+        case 20:
+            description = "简单模式：敌人数量适中，攻击频率低，适合休闲游戏。";
+            break;
+        case 60:
+            description = "普通模式：标准游戏体验，敌人生命值和数量均衡，具有一定挑战性。";
+            break;
+        case 120:
+            description = "困难模式：敌人数量增多，速度更快，需要较高的反应速度。";
+            break;
+        case 200:
+            description = "专家模式：敌人生命值提高，攻击更为频繁，需要精准的操作。";
+            break;
+        case 300:
+            description = "大师模式：极具挑战性，敌人数量众多且速度极快，仅适合经验丰富的玩家。";
+            break;
+        default:
+            description = "选择游戏难度来开始游戏";
+    }
     
-    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-    gainNode.gain.linearRampToValueAtTime(0.3, audioContext.currentTime + 0.2);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 1.5);
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.start();
-    oscillator.stop(audioContext.currentTime + 1.5);
+    difficultyDescription.textContent = description;
 }
 
-// 修改游戏结束处理函数
-function handleGameOver() {
-    if (gameRunning) {
-        gameRunning = false;
+// 使用选择的难度开始游戏
+function startGameWithSelectedDifficulty() {
+    if (selectedDifficulty !== null) {
+        // 设置初始难度值
+        difficulty = selectedDifficulty;
         
-        // 播放游戏结束音效
-        if (soundEnabled && audioContext) {
-            createGameOverSound();
-        }
+        // 隐藏难度选择界面
+        hideDifficultySelectScreen();
         
-        // 创建爆炸动画
-        createExplosion(player.x, player.y, 2);
-        createExplosion(player.x + player.width / 2, player.y, 2);
-        createExplosion(player.x - player.width / 2, player.y, 2);
-        
-        // 震动屏幕
-        shakeScreen(20, 500);
-        
-        // 切换界面状态
-        setTimeout(() => {
-            showGameOverScreen();
-        }, 2000);
+        // 开始游戏
+        startGame();
     }
 }
+
+// 初始化难度选择功能
+initDifficultySelection();
 
 // 页面加载完成后初始化画布大小
 window.addEventListener('load', function() {
@@ -2603,4 +1098,272 @@ window.addEventListener('load', function() {
     
     // 显示游戏就绪状态
     console.log("游戏初始化完成，等待开始");
+    
+    // 显示难度选择界面
+    showDifficultySelectScreen();
 });
+
+// 事件监听
+startButton.addEventListener('click', function() {
+    console.log("点击了开始按钮");
+    if (!gameRunning) {
+        // 如果游戏未运行，显示难度选择界面
+        showDifficultySelectScreen();
+    } else {
+        // 如果游戏已经在运行，直接重新开始游戏
+        startGame();
+    }
+});
+
+pauseButton.addEventListener('click', function() {
+    console.log("点击了暂停按钮");
+    togglePause();
+});
+
+// 重新开始按钮事件监听
+restartButton.addEventListener('click', function() {
+    console.log("点击了重新开始按钮");
+    hideGameOverScreen();
+    showDifficultySelectScreen();
+});
+
+// 创建爆炸效果
+function createExplosion(x, y, size) {
+    // 播放爆炸音效
+    playSound('explosion');
+    
+    // 创建爆炸粒子
+    const particleCount = Math.floor(size * 3); // 进一步增加粒子数量
+    
+    for (let i = 0; i < particleCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 6 + 3; // 增加粒子速度范围
+        const particleSize = Math.random() * 6 + 2; // 增加粒子大小范围
+        const lifetime = Math.random() * 50 + 40; // 增加粒子寿命
+        
+        particles.push({
+            x: x,
+            y: y,
+            size: particleSize,
+            speed: speed,
+            angle: angle,
+            color: getExplosionColor(),
+            alpha: 1,
+            lifetime: lifetime,
+            currentLife: 0,
+            rotation: Math.random() * Math.PI * 2,
+            rotationSpeed: (Math.random() - 0.5) * 0.3 // 增加旋转速度
+        });
+    }
+    
+    // 创建爆炸冲击波 - 更大尺寸
+    explosions.push({
+        x: x,
+        y: y,
+        size: 0,
+        maxSize: size * 3, // 进一步增加冲击波最大尺寸
+        alpha: 0.8,
+        growing: true,
+        color: 'rgba(255, 200, 50, 0.8)'
+    });
+    
+    // 添加第二个冲击波 - 不同颜色
+    explosions.push({
+        x: x,
+        y: y,
+        size: 0,
+        maxSize: size * 2.2,
+        alpha: 0.6,
+        growing: true,
+        color: 'rgba(255, 100, 50, 0.7)'
+    });
+    
+    // 添加第三个冲击波 - 白色闪光
+    explosions.push({
+        x: x,
+        y: y,
+        size: 0,
+        maxSize: size * 1.5,
+        alpha: 0.9,
+        growing: true,
+        color: 'rgba(255, 255, 255, 0.9)'
+    });
+    
+    // 屏幕震动效果 - 更敏感的震动触发和更强的震动效果
+    if (size > 25) {
+        const intensity = Math.min(1, size / 50); // 根据爆炸大小调整震动强度
+        shakeScreen(intensity);
+    }
+}
+
+// 获取爆炸颜色 - 更丰富的颜色选择
+function getExplosionColor() {
+    const colors = [
+        '#ff0000', '#ff3300', '#ff5500', '#ff7700', 
+        '#ff9900', '#ffaa00', '#ffcc00', '#ffff00', 
+        '#ffffff', '#ffddaa', '#ffaaaa', '#ffee88',
+        '#ff88aa', '#ff6633', '#ffcc77', '#ffffaa'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// 创建击中特效
+function createHitEffect(x, y) {
+    // 简单的击中特效
+    const sparkCount = 5;
+    
+    for (let i = 0; i < sparkCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 2 + 1;
+        
+        particles.push({
+            x: x,
+            y: y,
+            size: Math.random() * 3 + 1,
+            speed: speed,
+            angle: angle,
+            color: '#ffffff',
+            alpha: 1,
+            lifetime: 10,
+            currentLife: 0
+        });
+    }
+}
+
+// 绘制粒子系统 - 增强粒子效果
+function drawParticles() {
+    // 绘制粒子
+    for (let i = 0; i < particles.length; i++) {
+        const particle = particles[i];
+        
+        ctx.save();
+        ctx.translate(particle.x, particle.y);
+        ctx.rotate(particle.rotation);
+        
+        // 使用渐变色添加发光效果
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, particle.size * 1.5);
+        gradient.addColorStop(0, 'rgba(255, 255, 255, ' + particle.alpha + ')');
+        gradient.addColorStop(0.4, particle.color.replace(')', ', ' + particle.alpha + ')').replace('rgb', 'rgba'));
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = gradient;
+        
+        // 绘制粒子形状
+        ctx.beginPath();
+        
+        // 根据粒子大小选择不同形状
+        if (particle.size > 4) {
+            // 星形粒子
+            const spikes = Math.floor(particle.size / 2) + 3; // 根据大小动态调整尖角数量
+            const outerRadius = particle.size;
+            const innerRadius = particle.size / 2;
+            
+            for (let j = 0; j < spikes * 2; j++) {
+                const radius = j % 2 === 0 ? outerRadius : innerRadius;
+                const angle = (Math.PI * 2 / (spikes * 2)) * j;
+                const x = Math.cos(angle) * radius;
+                const y = Math.sin(angle) * radius;
+                
+                if (j === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+        } else {
+            // 圆形粒子
+            ctx.arc(0, 0, particle.size, 0, Math.PI * 2);
+        }
+        
+        ctx.fill();
+        
+        // 添加边缘发光效果
+        if (particle.size > 3) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, ' + particle.alpha * 0.5 + ')';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+        
+        // 更新粒子旋转
+        particle.rotation += particle.rotationSpeed;
+        
+        ctx.restore();
+    }
+    
+    // 绘制爆炸冲击波
+    for (let i = 0; i < explosions.length; i++) {
+        const explosion = explosions[i];
+        
+        // 使用渐变色绘制冲击波
+        const gradient = ctx.createRadialGradient(
+            explosion.x, explosion.y, explosion.size * 0.5,
+            explosion.x, explosion.y, explosion.size
+        );
+        gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+        gradient.addColorStop(0.5, explosion.color || 'rgba(255, 200, 50, ' + explosion.alpha + ')');
+        gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+        
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(explosion.x, explosion.y, explosion.size, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // 添加发光效果
+        ctx.fillStyle = 'rgba(255, 200, 100, ' + explosion.alpha * 0.2 + ')';
+        ctx.beginPath();
+        ctx.arc(explosion.x, explosion.y, explosion.size * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    // 重置全局透明度
+    ctx.globalAlpha = 1;
+}
+
+// 更新粒子系统
+function updateParticles() {
+    // 更新粒子
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const particle = particles[i];
+        
+        // 更新位置
+        particle.x += Math.cos(particle.angle) * particle.speed;
+        particle.y += Math.sin(particle.angle) * particle.speed;
+        
+        // 增加生命周期
+        particle.currentLife++;
+        
+        // 减少速度
+        particle.speed *= 0.97;
+        
+        // 减少大小
+        if (particle.currentLife > particle.lifetime * 0.7) {
+            particle.size *= 0.95;
+        }
+        
+        // 减少透明度
+        particle.alpha = 1 - (particle.currentLife / particle.lifetime);
+        
+        // 移除死亡粒子
+        if (particle.currentLife >= particle.lifetime || particle.size < 0.5) {
+            particles.splice(i, 1);
+        }
+    }
+    
+    // 更新爆炸冲击波
+    for (let i = explosions.length - 1; i >= 0; i--) {
+        const explosion = explosions[i];
+        
+        if (explosion.growing) {
+            explosion.size += 8;
+            if (explosion.size >= explosion.maxSize) {
+                explosion.growing = false;
+            }
+        } else {
+            explosion.alpha -= 0.03;
+            if (explosion.alpha <= 0) {
+                explosions.splice(i, 1);
+            }
+        }
+    }
+} 
