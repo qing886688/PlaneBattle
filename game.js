@@ -75,6 +75,10 @@ let gameState = 'waiting'; // 游戏状态: waiting, playing, gameover
 let difficultyLevel = 1;
 let powerupCounter = 0;
 let lastComboTime = 0;
+let autoAttack = true; // 自动攻击开关
+let lastAutoAttackTime = 0; // 上次自动攻击时间
+let autoAttackDelay = 150; // 自动攻击间隔(毫秒)，从300降低到150
+let autoAttackPower = 1.5; // 自动攻击威力
 
 // 粒子系统
 let particles = [];
@@ -366,14 +370,14 @@ function fireBullet() {
         width: 10,
         height: 20,
         speed: 7,
-        color: '#2ecc71',
-        power: 1,
+        color: autoAttack ? '#00ffaa' : '#2ecc71', // 自动攻击子弹颜色不同
+        power: autoAttack ? autoAttackPower : 1, // 自动攻击威力更高
         type: 'normal'
     };
     bullets.push(bullet);
     
-    // 设置冷却时间
-    specialWeaponCooldown = 10;
+    // 设置冷却时间 (对于自动攻击，冷却时间更短)
+    specialWeaponCooldown = autoAttack ? 3 : 10; // 从5降低到3
 }
 
 // 更新游戏
@@ -395,6 +399,12 @@ function update(time) {
     }
     if (keys.Space) {
         fireBullet();
+    }
+    
+    // 自动攻击
+    if (autoAttack && time - lastAutoAttackTime > autoAttackDelay) {
+        fireBullet();
+        lastAutoAttackTime = time;
     }
     
     // 更新子弹位置
@@ -736,6 +746,32 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
         keys.Space = true;
         e.preventDefault();
+    }
+    
+    // 按 'A' 键切换自动攻击
+    if (e.code === 'KeyA') {
+        autoAttack = !autoAttack;
+        
+        // 显示自动攻击状态提示
+        const autoAttackStatus = document.createElement('div');
+        autoAttackStatus.className = 'achievement-notification show';
+        autoAttackStatus.innerHTML = `
+            <div class="achievement-icon">${autoAttack ? '🔄' : '🛑'}</div>
+            <div class="achievement-content">
+                <div class="achievement-title">自动攻击${autoAttack ? '开启' : '关闭'}</div>
+                <div class="achievement-desc">攻击间隔: ${autoAttackDelay}ms 伤害: ${autoAttackPower}</div>
+            </div>
+        `;
+        
+        document.body.appendChild(autoAttackStatus);
+        
+        // 3秒后移除提示
+        setTimeout(() => {
+            autoAttackStatus.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(autoAttackStatus);
+            }, 500);
+        }, 3000);
     }
 });
 
