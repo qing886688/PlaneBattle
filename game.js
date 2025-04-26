@@ -7,10 +7,45 @@ const scoreElement = document.getElementById('score');
 const livesElement = document.getElementById('lives');
 const fpsElement = document.getElementById('fps');
 const killCountElement = document.getElementById('killCount');
+const gameOverScreen = document.getElementById('gameOverScreen');
+const finalScoreElement = document.getElementById('finalScore');
+const audioLoadingMessage = document.getElementById('audioLoadingMessage');
+const restartButton = document.getElementById('restartButton');
 
 // 设置画布尺寸
-canvas.width = 480;
-canvas.height = 600;
+let canvasWidth = 480;
+let canvasHeight = 600;
+let canvasScale = 1;
+
+// 初始化画布大小
+function resizeCanvas() {
+    const container = document.querySelector('.canvas-container');
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    
+    // 保持宽高比为4:5
+    const aspectRatio = 4/5;
+    
+    // 根据容器尺寸计算最佳画布尺寸
+    if (containerWidth / containerHeight > aspectRatio) {
+        // 高度受限
+        canvas.style.height = '100%';
+        canvas.style.width = 'auto';
+        canvasScale = containerHeight / canvasHeight;
+    } else {
+        // 宽度受限
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+        canvasScale = containerWidth / canvasWidth;
+    }
+    
+    // 保持内部分辨率不变
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+}
+
+// 监听窗口大小变化
+window.addEventListener('resize', resizeCanvas);
 
 // 游戏状态
 let gameRunning = false;
@@ -407,7 +442,6 @@ function unlockAudio() {
 
 // 添加音频加载状态管理
 let audioLoaded = false;
-const audioLoadingMessage = document.getElementById('audioLoadingMessage');
 
 // 修改初始化页面加载函数
 window.addEventListener('load', function() {
@@ -474,9 +508,6 @@ let gameElapsedTime = 0; // 游戏已进行时间（秒）
 
 // 全局变量部分添加
 const hitFlashElement = document.getElementById('hitFlash');
-const gameOverScreen = document.getElementById('gameOverScreen');
-const finalScoreElement = document.getElementById('finalScore');
-const restartButton = document.getElementById('restartButton');
 const radarContainer = document.getElementById('radar');
 let radarDots = [];
 let levelUpAnimationActive = false;
@@ -709,43 +740,47 @@ function updateFPS(time) {
 
 // 初始化游戏
 function init() {
+    // 初始化游戏状态
     score = 0;
     lives = 3;
+    gameTime = 0;
     killCount = 0;
+    
+    // 重置玩家位置
+    player.x = canvas.width / 2 - player.width / 2;
+    player.y = canvas.height - player.height - 20;
+    
+    // 清空所有游戏对象
     enemies = [];
     bullets = [];
     particles = [];
-    explosions = [];
     powerups = [];
-    comboCount = 0;
-    comboTimer = 0;
-    comboMultiplier = 1;
-    specialWeaponCooldown = 0;
-    shieldActive = false;
-    shieldTime = 0;
-    difficulty = 0; // 重置难度
-    gameTime = 0;
-    gameStartTime = performance.now();
-    gameElapsedTime = 0;
-    lastTime = performance.now();
+    explosions = [];
     
-    // 初始化成就
-    achievements = JSON.parse(JSON.stringify(ACHIEVEMENTS));
+    // 重置游戏状态
+    gameState = 'playing';
+    difficultyLevel = 1;
     
+    // 更新得分显示
     scoreElement.textContent = score;
     livesElement.textContent = lives;
-    killCountElement.textContent = `击毁: 0`;
-    document.getElementById('gameTime').textContent = "00:00";
-    player.x = canvas.width / 2 - 25;
-    player.y = canvas.height - 60;
+    killCountElement.textContent = `击毁: ${killCount}`;
     
+    // 创建星空背景
+    stars = [];
     createStars();
     
-    // 重置动画相关
-    radarDots = [];
-    explosionElements = [];
-    updateRadar();
-    clearExplosions();
+    // 重置道具相关
+    powerupCounter = 0;
+    specialWeaponCooldown = 0;
+    shieldActive = false;
+    shieldDuration = 0;
+    
+    // 重置combo计数
+    comboCount = 0;
+    lastComboTime = 0;
+    
+    // 隐藏游戏结束画面
     hideGameOverScreen();
 }
 
@@ -2007,12 +2042,14 @@ function gameOver() {
     cancelAnimationFrame(animationId);
     
     // 停止背景音乐，播放游戏结束音效
-    sounds.background.pause();
+    sounds.background && sounds.background.pause && sounds.background.pause();
     playSound('gameOver');
     
     // 显示游戏结束画面
     finalScoreElement.textContent = score;
     gameOverScreen.style.display = 'flex';
+    gameOverScreen.style.opacity = '1';
+    gameOverScreen.style.pointerEvents = 'auto';
     
     // 大爆炸效果
     createDOMExplosion(
@@ -2028,12 +2065,14 @@ function gameOver() {
 
 // 隐藏游戏结束画面
 function hideGameOverScreen() {
-    gameOverScreen.style.display = 'none';
+    gameOverScreen.style.opacity = '0';
+    gameOverScreen.style.pointerEvents = 'none';
 }
 
 // 开始游戏
 function startGame() {
     console.log("游戏开始");
+    resizeCanvas();
     init();
     gameRunning = true;
     gamePaused = false;
@@ -2043,6 +2082,9 @@ function startGame() {
     if (animationId) {
         cancelAnimationFrame(animationId);
     }
+    
+    // 隐藏游戏结束画面
+    hideGameOverScreen();
     
     // 播放音效
     if (soundEnabled && audioContext) {
@@ -2495,7 +2537,7 @@ function showLevelUpAnimation(level) {
 
 // 添加重启按钮监听器
 restartButton.addEventListener('click', function() {
-    hideGameOverScreen();
+    console.log("点击了重新开始按钮");
     startGame();
 });
 
@@ -2544,3 +2586,21 @@ function handleGameOver() {
         }, 2000);
     }
 }
+
+// 页面加载完成后初始化画布大小
+window.addEventListener('load', function() {
+    // 初始化画布大小
+    resizeCanvas();
+    
+    // 预先加载资源
+    loadResources();
+    
+    // 初始化音频
+    initAudio();
+    
+    // 初始化星空背景
+    createStars();
+    
+    // 显示游戏就绪状态
+    console.log("游戏初始化完成，等待开始");
+});
