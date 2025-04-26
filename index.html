@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>歼20打飞机</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-title">歼20空战模拟</div>
+        <div class="game-info">
+            <div class="info-group">
+                <div class="score"><span class="label">分数:</span> <span id="score">0</span></div>
+                <div class="lives"><span class="label">生命:</span> <span id="lives">3</span></div>
+            </div>
+            <div class="info-group">
+                <div class="time"><span class="label">时间:</span> <span id="gameTime">00:00</span></div>
+                <div class="difficulty"><span class="label">难度:</span> <span id="difficultyLevel">新手</span></div>
+            </div>
+        </div>
+        <div class="canvas-container">
+            <canvas id="gameCanvas"></canvas>
+            <div id="hitFlash"></div>
+        </div>
+        <div class="controls">
+            <button id="startButton">开始游戏</button>
+            <button id="pauseButton">暂停</button>
+            <button id="toggleSound" class="sound-button">🔊</button>
+        </div>
+        <div class="game-footer">
+            <div class="game-tips">提示: 使用↑↓←→控制移动，空格键发射子弹，B键使用炸弹</div>
+            <div class="stats">
+                <div id="fps">FPS: 0</div>
+                <div id="killCount">击毁: 0</div>
+            </div>
+        </div>
+        
+        <!-- 雷达扫描效果 -->
+        <div class="radar-container" id="radar">
+            <div class="radar-beam"></div>
+            <!-- 敌机雷达点会在JavaScript中动态添加 -->
+        </div>
+    </div>
+    
+    <!-- 用于显示游戏结束的覆盖层 -->
+    <div class="game-over-overlay" id="gameOverScreen">
+        <div class="game-over-title">游戏结束</div>
+        <div class="final-score">最终得分: <span id="finalScore">0</span></div>
+        <button class="restart-button" id="restartButton">重新开始</button>
+    </div>
+    
+    <!-- 音效加载提示 -->
+    <div id="audioLoadingMessage" class="audio-loading">
+        <div class="loader"></div>
+        <div>音效加载中...</div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html> 

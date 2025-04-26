@@ -1,0 +1,625 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+@keyframes backgroundAnimation {
+    0% {background-position: 0% 50%}
+    50% {background-position: 100% 50%}
+    100% {background-position: 0% 50%}
+}
+
+@keyframes glowing {
+    0% {box-shadow: 0 0 10px rgba(100, 200, 255, 0.7)}
+    50% {box-shadow: 0 0 20px rgba(100, 200, 255, 0.9)}
+    100% {box-shadow: 0 0 10px rgba(100, 200, 255, 0.7)}
+}
+
+@keyframes buttonPulse {
+    0% {transform: scale(1)}
+    50% {transform: scale(1.05)}
+    100% {transform: scale(1)}
+}
+
+@keyframes textGlow {
+    0% {text-shadow: 0 0 10px rgba(100, 200, 255, 0.7)}
+    50% {text-shadow: 0 0 20px rgba(100, 200, 255, 1)}
+    100% {text-shadow: 0 0 10px rgba(100, 200, 255, 0.7)}
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(-45deg, #0f0c29, #302b63, #24243e, #1a1a2e);
+    background-size: 400% 400%;
+    animation: backgroundAnimation 15s ease infinite;
+    color: white;
+    overflow: hidden;
+}
+
+.game-container {
+    width: 500px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    background-color: rgba(20, 20, 30, 0.8);
+    border-radius: 10px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    animation: glowing 3s infinite;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.game-title {
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    background: linear-gradient(90deg, #3498db, #9b59b6, #2ecc71);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: textGlow 3s infinite;
+    animation: slideInFromTop 1s ease-out;
+}
+
+.game-info {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 20px;
+    padding: 10px;
+    background: linear-gradient(90deg, rgba(50,50,80,0.7), rgba(80,50,100,0.7));
+    border-radius: 8px;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    animation: fadeIn 1.5s ease-out;
+}
+
+.info-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.score, .lives, .time, .difficulty {
+    position: relative;
+    padding: 5px 15px;
+    border-radius: 5px;
+    display: flex;
+    justify-content: space-between;
+    min-width: 120px;
+}
+
+#score, #lives, #gameTime, #difficultyLevel {
+    font-weight: bold;
+    font-size: 22px;
+    color: #ffcc00;
+    text-shadow: 0 0 5px rgba(255, 204, 0, 0.7);
+    margin-left: 10px;
+}
+
+#difficultyLevel {
+    transition: color 1s ease;
+}
+
+.difficulty-novice {
+    color: #2ecc71 !important; /* 绿色 - 新手 */
+}
+
+.difficulty-easy {
+    color: #3498db !important; /* 蓝色 - 简单 */
+}
+
+.difficulty-normal {
+    color: #f1c40f !important; /* 黄色 - 普通 */
+}
+
+.difficulty-hard {
+    color: #e67e22 !important; /* 橙色 - 困难 */
+}
+
+.difficulty-expert {
+    color: #e74c3c !important; /* 红色 - 专家 */
+}
+
+.difficulty-master {
+    color: #9b59b6 !important; /* 紫色 - 大师 */
+}
+
+.label {
+    opacity: 0.8;
+}
+
+.canvas-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+#gameCanvas {
+    background-color: rgba(0, 0, 0, 0.8);
+    width: 480px;
+    height: 600px;
+    display: block;
+    border: 2px solid #555;
+    border-radius: 5px;
+    box-shadow: 0 0 15px rgba(0, 100, 255, 0.6);
+    animation: zoomIn 1s ease-out;
+}
+
+.controls {
+    width: 100%;
+    display: flex;
+    justify-content: space-around;
+    margin-top: 20px;
+    animation: slideInFromBottom 1.2s ease-out;
+}
+
+button {
+    padding: 12px 25px;
+    font-size: 16px;
+    background: linear-gradient(45deg, #4CAF50, #2ecc71);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+    position: relative;
+    overflow: hidden;
+    animation: buttonPulse 2s infinite;
+}
+
+button:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: 0.5s;
+}
+
+button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(46, 204, 113, 0.6);
+    animation: pulse 1s infinite;
+}
+
+button:hover:before {
+    left: 100%;
+}
+
+#pauseButton {
+    background: linear-gradient(45deg, #f44336, #e74c3c);
+    box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+}
+
+#pauseButton:hover {
+    box-shadow: 0 8px 25px rgba(231, 76, 60, 0.6);
+}
+
+.game-footer {
+    width: 100%;
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    animation: fadeIn 2s ease-out;
+}
+
+.game-tips {
+    margin-bottom: 10px;
+    text-align: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 10px;
+    width: 100%;
+}
+
+.stats {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    font-family: monospace;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+#fps, #killCount {
+    padding: 3px 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+}
+
+/* 成就通知样式 */
+.achievement-notification {
+    position: fixed;
+    top: 20px;
+    right: -300px;
+    width: 280px;
+    background: rgba(20, 20, 30, 0.9);
+    border-left: 5px solid #f39c12;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    border-radius: 5px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    transition: right 0.5s ease;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+}
+
+.achievement-notification.show {
+    right: 20px;
+}
+
+.achievement-icon {
+    font-size: 30px;
+    margin-right: 15px;
+    color: #f39c12;
+    text-shadow: 0 0 10px rgba(243, 156, 18, 0.7);
+}
+
+.achievement-content {
+    flex: 1;
+}
+
+.achievement-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #f39c12;
+    margin-bottom: 5px;
+}
+
+.achievement-desc {
+    font-size: 14px;
+    color: #ecf0f1;
+    margin-bottom: 5px;
+}
+
+.achievement-reward {
+    font-size: 14px;
+    color: #2ecc71;
+    font-weight: bold;
+}
+
+/* 浮动分数样式 */
+.floating-score {
+    position: absolute;
+    color: #f1c40f;
+    font-weight: bold;
+    font-size: 18px;
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
+    transition: all 1s ease;
+    z-index: 100;
+    pointer-events: none;
+}
+
+/* 道具掉落动画 */
+@keyframes floatAnimation {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-5px); }
+    100% { transform: translateY(0px); }
+}
+
+@keyframes glowPulse {
+    0% { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.7)); }
+    50% { filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.9)); }
+    100% { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.7)); }
+}
+
+/* 连击系统样式 */
+@keyframes comboGlow {
+    0% { text-shadow: 0 0 5px rgba(255, 255, 255, 0.7); }
+    50% { text-shadow: 0 0 15px rgba(255, 255, 255, 1); }
+    100% { text-shadow: 0 0 5px rgba(255, 255, 255, 0.7); }
+}
+
+/* 护盾动画 */
+@keyframes shieldPulse {
+    0% { transform: scale(1); opacity: 0.7; }
+    50% { transform: scale(1.05); opacity: 0.9; }
+    100% { transform: scale(1); opacity: 0.7; }
+}
+
+/* 开场动画 */
+@keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+@keyframes slideInFromTop {
+    0% { transform: translateY(-50px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInFromBottom {
+    0% { transform: translateY(50px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes zoomIn {
+    0% { transform: scale(0.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes radar-beam {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* 击中动画 */
+@keyframes hitFlash {
+    0% { background-color: rgba(255, 0, 0, 0.5); }
+    100% { background-color: rgba(255, 0, 0, 0); }
+}
+
+/* 雷达扫描效果 */
+.radar-container {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background-color: rgba(0, 30, 60, 0.5);
+    border: 2px solid rgba(0, 155, 255, 0.7);
+    box-shadow: 0 0 10px rgba(0, 200, 255, 0.5);
+    overflow: hidden;
+    z-index: 50;
+    animation: pulse 3s infinite;
+}
+
+.radar-beam {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 50%;
+    background: linear-gradient(to right, rgba(0, 200, 255, 0), rgba(0, 255, 255, 0.7));
+    transform-origin: bottom right;
+    animation: radar-beam 2s linear infinite;
+}
+
+.radar-dot {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background-color: rgba(255, 50, 50, 0.8);
+    border-radius: 50%;
+    box-shadow: 0 0 5px rgba(255, 0, 0, 0.5);
+    transform: translate(-50%, -50%);
+    z-index: 51;
+    animation: pulse 1s infinite;
+}
+
+/* 爆炸特效 */
+.explosion {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    background-image: radial-gradient(circle, rgba(255, 255, 200, 1) 0%, rgba(255, 100, 0, 0.5) 30%, rgba(255, 0, 0, 0) 70%);
+    transform: translate(-50%, -50%);
+    z-index: 100;
+    animation: explode 0.5s ease-out forwards;
+}
+
+/* 命中闪光效果 */
+#hitFlash {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 0, 0, 0.3);
+    pointer-events: none;
+    display: none;
+    z-index: 90;
+}
+
+/* 游戏结束画面 */
+.game-over-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fadeIn 0.5s;
+}
+
+.game-over-title {
+    font-size: 48px;
+    color: #ff3333;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+    animation: pulse 2s infinite;
+}
+
+.final-score {
+    font-size: 36px;
+    color: white;
+    margin-bottom: 30px;
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+}
+
+.restart-button {
+    padding: 10px 30px;
+    font-size: 24px;
+    color: white;
+    background: linear-gradient(to bottom, #3366ff, #0033cc);
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 0 10px rgba(0, 100, 255, 0.7);
+}
+
+.restart-button:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 15px rgba(0, 150, 255, 0.9);
+}
+
+/* 屏幕震动效果 */
+.screen-shake {
+    animation: shake 0.5s;
+}
+
+/* 难度提升动画 */
+@keyframes levelUp {
+    0% { transform: scale(1); color: white; }
+    25% { transform: scale(1.3); color: #ffcc00; }
+    50% { transform: scale(1.5); color: #ff6600; }
+    75% { transform: scale(1.3); color: #ffcc00; }
+    100% { transform: scale(1); color: white; }
+}
+
+/* 动画关键帧 */
+@keyframes explode {
+    0% { opacity: 1; transform: translate(-50%, -50%) scale(0.1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(2); }
+}
+
+@keyframes pulse {
+    0% { opacity: 0.7; box-shadow: 0 0 5px rgba(0, 200, 255, 0.7); }
+    50% { opacity: 1; box-shadow: 0 0 10px rgba(0, 255, 255, 0.9); }
+    100% { opacity: 0.7; box-shadow: 0 0 5px rgba(0, 200, 255, 0.7); }
+}
+
+@keyframes radar-beam {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+@keyframes hitFlash {
+    0% { opacity: 0.7; }
+    100% { opacity: 0; }
+}
+
+@keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+/* 连击提示样式 */
+.combo-notification {
+    position: absolute;
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    text-shadow: 0 0 5px rgba(255, 0, 0, 0.7);
+    pointer-events: none;
+    animation: comboFade 1s forwards;
+    z-index: 200;
+}
+
+@keyframes comboFade {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-50px) scale(1.5); }
+}
+
+/* 音量控制按钮 */
+.sound-button {
+    background: linear-gradient(45deg, #9b59b6, #8e44ad);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 5px 15px rgba(155, 89, 182, 0.4);
+}
+
+.sound-button:hover {
+    box-shadow: 0 8px 25px rgba(155, 89, 182, 0.6);
+    transform: translateY(-3px);
+}
+
+/* 音频加载提示 */
+.audio-loading {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    animation: fadeIn 0.5s;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s;
+}
+
+.audio-loading.show {
+    opacity: 1;
+}
+
+/* 加载动画 */
+.loader {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #fff;
+    border-bottom-color: transparent;
+    border-radius: 50%;
+    display: inline-block;
+    animation: rotation 1s linear infinite;
+}
+
+@keyframes rotation {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* 音效播放动画 */
+@keyframes soundWave {
+    0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 255, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+.sound-playing {
+    animation: soundWave 1s ease-out;
+} 
