@@ -55,7 +55,7 @@ window.addEventListener('resize', resizeCanvas);
 let gameRunning = false;
 let gamePaused = false;
 let score = 0;
-let lives = 3;
+let lives = 5; // 初始生命值从3增加到5
 let animationId;
 let gameTime = 0;
 let lastTime = 0;
@@ -77,8 +77,8 @@ let powerupCounter = 0;
 let lastComboTime = 0;
 let autoAttack = true; // 自动攻击开关
 let lastAutoAttackTime = 0; // 上次自动攻击时间
-let autoAttackDelay = 150; // 自动攻击间隔(毫秒)，从300降低到150
-let autoAttackPower = 1.5; // 自动攻击威力
+let autoAttackDelay = 120; // 自动攻击间隔(毫秒)，从150降低到120
+let autoAttackPower = 2.0; // 自动攻击威力从1.5提高到2.0
 
 // 粒子系统
 let particles = [];
@@ -91,7 +91,7 @@ const player = {
     y: canvas.height - 60,
     width: 50,
     height: 50,
-    speed: 5,
+    speed: 6, // 增加玩家移动速度，从5改为6
     color: '#3498db',
     trailTimer: 0
 };
@@ -310,8 +310,8 @@ function drawStars() {
 // 生成敌机
 function spawnEnemy() {
     // 基于当前难度计算敌机的尺寸 (难度越高尺寸越小，更难命中)
-    const baseSize = 40 - (difficulty * 0.5);
-    const size = Math.max(25, baseSize + Math.random() * 20);
+    const baseSize = 40 - (difficulty * 0.3);
+    const size = Math.max(30, baseSize + Math.random() * 20);
     
     const enemyType = Math.floor(Math.random() * 3);  // 0, 1, 2 三种敌机类型
     
@@ -320,24 +320,24 @@ function spawnEnemy() {
     switch(enemyType) {
         case 0: // 轻型战机
             color = '#8a2be2';
-            // 初始生命值为1，随难度缓慢增加
-            health = 1 + Math.floor(difficulty / 120);
+            // 初始生命值为1，减缓随难度增加的速度
+            health = 1 + Math.floor(difficulty / 200);
             break;
         case 1: // 中型战机
             color = '#e74c3c';
-            // 初始生命值为1，随难度略快增加
-            health = 1 + Math.floor(difficulty / 100);
+            // 初始生命值为1，减缓随难度增加的速度
+            health = 1 + Math.floor(difficulty / 180);
             break;
         case 2: // 重型战机
             color = '#c0392b';
-            // 初始生命值为2，随难度更快增加
-            health = 2 + Math.floor(difficulty / 80);
+            // 初始生命值为2，减缓随难度增加的速度
+            health = 2 + Math.floor(difficulty / 150);
             break;
     }
     
     // 根据难度调整敌机速度
-    const baseSpeed = 1 + (difficulty / 300);
-    const randomSpeed = Math.random() * 1.5;
+    const baseSpeed = 1 + (difficulty / 500);
+    const randomSpeed = Math.random() * 1.2;
     
     const enemy = {
         x: Math.random() * (canvas.width - size),
@@ -351,7 +351,7 @@ function spawnEnemy() {
         rotationSpeed: (Math.random() - 0.5) * 0.1,
         rotation: 0,
         type: enemyType,
-        scoreValue: 10 + Math.floor(difficulty / 60) // 随难度增加分数价值
+        scoreValue: 5 + Math.floor(difficulty / 100) // 降低基础得分并减缓得分增长，从10+difficulty/80改为5+difficulty/100
     };
     enemies.push(enemy);
 }
@@ -369,15 +369,15 @@ function fireBullet() {
         y: player.y,
         width: 10,
         height: 20,
-        speed: 7,
+        speed: 8, // 提高子弹速度，从7改为8
         color: autoAttack ? '#00ffaa' : '#2ecc71', // 自动攻击子弹颜色不同
-        power: autoAttack ? autoAttackPower : 1, // 自动攻击威力更高
+        power: autoAttack ? autoAttackPower : 1.5, // 普通攻击威力也提高，从1改为1.5
         type: 'normal'
     };
     bullets.push(bullet);
     
     // 设置冷却时间 (对于自动攻击，冷却时间更短)
-    specialWeaponCooldown = autoAttack ? 3 : 10; // 从5降低到3
+    specialWeaponCooldown = autoAttack ? 2 : 8; // 降低冷却时间，从3/10改为2/8
 }
 
 // 更新游戏
@@ -419,7 +419,7 @@ function update(time) {
     }
     
     // 随机生成敌机 (根据难度调整生成频率)
-    if (Math.random() < 0.02 + (difficulty / 1000)) {
+    if (Math.random() < 0.01 + (difficulty / 2000)) { // 进一步降低敌机生成概率，从0.015+difficulty/1500改为0.01+difficulty/2000
         spawnEnemy();
     }
     
@@ -494,6 +494,28 @@ function update(time) {
             enemies.splice(i, 1);
             
             // 创建爆炸效果
+            createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2, enemy.width);
+            
+            // 无敌时间 - 短暂闪烁效果
+            let invincibleTime = 0;
+            let blinkCount = 0;
+            const blinkInterval = setInterval(() => {
+                if (invincibleTime >= 1000) { // 1秒无敌时间
+                    clearInterval(blinkInterval);
+                    canvas.style.filter = 'none';
+                    return;
+                }
+                
+                // 闪烁效果
+                if (blinkCount % 2 === 0) {
+                    canvas.style.filter = 'brightness(1.5)';
+                } else {
+                    canvas.style.filter = 'none';
+                }
+                
+                blinkCount++;
+                invincibleTime += 100;
+            }, 100);
             
             // 检查游戏是否结束
             if (lives <= 0) {
@@ -514,7 +536,7 @@ function update(time) {
     updateStars();
     
     // 缓慢增加难度
-    difficulty += 0.01;
+    difficulty += 0.006;
     // 每10秒更新难度显示
     if (Math.floor(gameTime) % 10 === 0 && Math.floor(gameTime) > 0) {
         updateDifficultyLevel();
@@ -822,20 +844,20 @@ function updateDifficultyLevel() {
         'difficulty-master'
     );
     
-    // 根据难度值设置不同等级
-    if (difficulty < 15) {
+    // 调整难度值范围，让各难度级别可以持续更长时间
+    if (difficulty < 20) {
         levelText = "新手";
         levelClass = "difficulty-novice";
-    } else if (difficulty < 45) {
+    } else if (difficulty < 60) {
         levelText = "简单";
         levelClass = "difficulty-easy";
-    } else if (difficulty < 90) {
+    } else if (difficulty < 120) {
         levelText = "普通";
         levelClass = "difficulty-normal";
-    } else if (difficulty < 150) {
+    } else if (difficulty < 200) {
         levelText = "困难";
         levelClass = "difficulty-hard";
-    } else if (difficulty < 240) {
+    } else if (difficulty < 320) {
         levelText = "专家";
         levelClass = "difficulty-expert";
     } else {
@@ -857,7 +879,7 @@ function updateDifficultyLevel() {
 function init() {
     // 初始化游戏状态
     score = 0;
-    lives = 3;
+    lives = 5; // 保持与前面定义一致
     gameTime = 0;
     killCount = 0;
     
@@ -1079,20 +1101,20 @@ function updateDifficultyDescription(diffValue) {
         case 0:
             description = "新手模式：适合初次游戏的玩家，敌人数量少，速度慢，游戏节奏轻松。";
             break;
-        case 20:
+        case 15:
             description = "简单模式：敌人数量适中，攻击频率低，适合休闲游戏。";
             break;
-        case 60:
+        case 40:
             description = "普通模式：标准游戏体验，敌人生命值和数量均衡，具有一定挑战性。";
             break;
-        case 120:
-            description = "困难模式：敌人数量增多，速度更快，需要较高的反应速度。";
+        case 80:
+            description = "困难模式：敌人数量增多，速度较快，需要一定的反应速度。";
             break;
-        case 200:
-            description = "专家模式：敌人生命值提高，攻击更为频繁，需要精准的操作。";
+        case 150:
+            description = "专家模式：敌人生命值较高，攻击较为频繁，需要精准的操作。";
             break;
-        case 300:
-            description = "大师模式：极具挑战性，敌人数量众多且速度极快，仅适合经验丰富的玩家。";
+        case 250:
+            description = "大师模式：挑战性较高，敌人数量较多且速度较快，适合有经验的玩家。";
             break;
         default:
             description = "选择游戏难度来开始游戏";
