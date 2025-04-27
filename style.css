@@ -2,6 +2,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    touch-action: manipulation;
 }
 
 @keyframes backgroundAnimation {
@@ -731,4 +732,108 @@ button:hover:before {
 .difficulty-option.selected {
     transform: scale(1.1);
     box-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+}
+
+/* 虚拟摇杆样式 */
+.virtual-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+    display: none; /* 默认隐藏，在移动设备上通过JS显示 */
+}
+
+.joystick-container {
+    position: absolute;
+    bottom: 15%;
+    left: 15%;
+    width: 100px;
+    height: 100px;
+    pointer-events: auto;
+}
+
+.joystick-base {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100px;
+    height: 100px;
+    background-color: rgba(50, 50, 50, 0.5);
+    border: 2px solid rgba(100, 100, 100, 0.8);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.joystick-handle {
+    width: 50px;
+    height: 50px;
+    background-color: rgba(70, 130, 180, 0.8);
+    border: 2px solid rgba(100, 150, 200, 0.9);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 10px rgba(100, 150, 255, 0.7);
+}
+
+.fire-button {
+    position: absolute;
+    bottom: 15%;
+    right: 15%;
+    width: 80px;
+    height: 80px;
+    background-color: rgba(200, 50, 50, 0.7);
+    border: 2px solid rgba(255, 100, 100, 0.9);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 18px;
+    pointer-events: auto;
+    user-select: none;
+    box-shadow: 0 0 15px rgba(255, 100, 100, 0.7);
+}
+
+.fire-button:active {
+    background-color: rgba(255, 70, 70, 0.9);
+    transform: scale(0.95);
+}
+
+/* 移动设备上的样式调整 */
+@media (max-width: 768px) {
+    .virtual-controls {
+        display: block; /* 在移动设备上显示虚拟控制器 */
+    }
+    
+    .game-tips {
+        font-size: 10px;
+        padding: 5px;
+    }
+    
+    .game-title {
+        font-size: 24px;
+        margin-bottom: 10px;
+    }
+    
+    .game-info {
+        font-size: 12px;
+        margin-bottom: 3px;
+    }
+    
+    #score, #lives, #gameTime, #difficultyLevel {
+        font-size: 14px;
+    }
+    
+    .controls button {
+        padding: 6px 15px;
+        font-size: 12px;
+    }
 } 

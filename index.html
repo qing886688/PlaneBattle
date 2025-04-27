@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>空中对决</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -22,6 +22,16 @@
         <div class="canvas-container">
             <canvas id="gameCanvas"></canvas>
             <div id="hitFlash"></div>
+            
+            <!-- 虚拟摇杆元素 -->
+            <div id="virtualControls" class="virtual-controls">
+                <div id="joystickContainer" class="joystick-container">
+                    <div id="joystickBase" class="joystick-base">
+                        <div id="joystickHandle" class="joystick-handle"></div>
+                    </div>
+                </div>
+                <div id="fireButton" class="fire-button">发射</div>
+            </div>
         </div>
         <div class="controls">
             <button id="startButton">开始游戏</button>

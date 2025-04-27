@@ -16,6 +16,12 @@ const difficultyDescription = document.getElementById('difficultyDescription');
 const hitFlashElement = document.getElementById('hitFlash');
 const radarContainer = document.getElementById('radar');
 
+// 虚拟控制元素
+const virtualControls = document.getElementById('virtualControls');
+const joystickBase = document.getElementById('joystickBase');
+const joystickHandle = document.getElementById('joystickHandle');
+const fireButton = document.getElementById('fireButton');
+
 // 设置画布尺寸
 let canvasWidth = 480;
 let canvasHeight = 600;
@@ -80,6 +86,24 @@ let lastAutoAttackTime = 0; // 上次自动攻击时间
 let autoAttackDelay = 120; // 自动攻击间隔(毫秒)，从150降低到120
 let autoAttackPower = 2.0; // 自动攻击威力从1.5提高到2.0
 
+// 虚拟摇杆相关变量
+let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+let joystickActive = false;
+let joystickTouchId = null;
+let joystickBaseX = 0;
+let joystickBaseY = 0;
+let joystickX = 0;
+let joystickY = 0;
+let joystickSize = 80; // 摇杆大小
+let joystickLimit = 40; // 摇杆移动限制
+let joystickCenter = { x: 0, y: 0 }; // 摇杆中心点
+let joystickKnob = { x: 0, y: 0 }; // 摇杆控制点
+let fireButtonX = 0; // 发射按钮X坐标
+let fireButtonY = 0; // 发射按钮Y坐标
+let fireButtonRadius = 30; // 发射按钮半径
+let fireButtonActive = false; // 发射按钮状态
+let fireButtonTouchId = null; // 发射按钮触摸ID
+
 // 粒子系统
 let particles = [];
 let explosions = [];
@@ -133,7 +157,8 @@ const sounds = {
     bomb: null,
     hit: null,
     levelUp: null,
-    achievement: null
+    achievement: null,
+    homing: null
 };
 
 // 添加音量控制
@@ -176,7 +201,8 @@ const POWERUP_TYPES = {
     BOMB: 2,        // 清屏炸弹
     SHIELD: 3,      // 护盾
     SCORE: 4,       // 分数加成
-    SPECIAL: 5      // 特殊武器
+    SPECIAL: 5,      // 特殊武器
+    HOMING: 6       // 追踪子弹
 };
 
 // 道具掉落概率（百分比）
@@ -250,6 +276,9 @@ function playSound(sound) {
             break;
         case 'achievement':
             createAchievementSound();
+            break;
+        case 'homing':
+            createHomingSoundEffect();
             break;
         // 其他声音类型...
     }
@@ -430,7 +459,7 @@ function fireBullet() {
 // 创建道具
 function createPowerup(x, y) {
     // 随机选择一种道具类型
-    const type = Math.floor(Math.random() * Object.keys(POWERUP_TYPES).length);
+    const type = Math.floor(Math.random() * (Object.keys(POWERUP_TYPES).length));
     
     // 道具的颜色和效果
     let color, effectText, label;
@@ -465,6 +494,11 @@ function createPowerup(x, y) {
             color = '#ff00ff'; // 更鲜艳的紫色
             effectText = '特殊武器';
             label = '★';
+            break;
+        case POWERUP_TYPES.HOMING:
+            color = '#0088ff'; // 蓝色
+            effectText = '追踪子弹';
+            label = '◉';
             break;
     }
     
@@ -670,6 +704,46 @@ function drawPowerups() {
                 drawStar(0, 0, 5, powerup.width/2 * 0.8, powerup.width/4 * 0.4);
                 break;
                 
+            case POWERUP_TYPES.HOMING: // 追踪子弹 - 雷达/目标样式
+                // 绘制圆形背景
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(0, 0, powerup.width/2 * 0.9, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 绘制目标标记
+                ctx.strokeStyle = powerup.color;
+                ctx.lineWidth = 2;
+                
+                // 外圈
+                ctx.beginPath();
+                ctx.arc(0, 0, powerup.width/2 * 0.7, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // 内圈
+                ctx.beginPath();
+                ctx.arc(0, 0, powerup.width/2 * 0.4, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // 中心点
+                ctx.fillStyle = powerup.color;
+                ctx.beginPath();
+                ctx.arc(0, 0, powerup.width/2 * 0.15, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 十字瞄准线
+                ctx.beginPath();
+                ctx.moveTo(-powerup.width/2 * 0.9, 0);
+                ctx.lineTo(-powerup.width/2 * 0.2, 0);
+                ctx.moveTo(powerup.width/2 * 0.2, 0);
+                ctx.lineTo(powerup.width/2 * 0.9, 0);
+                ctx.moveTo(0, -powerup.height/2 * 0.9);
+                ctx.lineTo(0, -powerup.height/2 * 0.2);
+                ctx.moveTo(0, powerup.height/2 * 0.2);
+                ctx.lineTo(0, powerup.height/2 * 0.9);
+                ctx.stroke();
+                break;
+                
             default: // 默认方形
                 ctx.fillRect(-powerup.width/2, -powerup.height/2, powerup.width, powerup.height);
         }
@@ -871,6 +945,11 @@ function applyPowerupEffect(powerup) {
         case POWERUP_TYPES.SPECIAL: // 特殊武器 - 发射多方向子弹
             fireSpecialWeapon();
             break;
+            
+        case POWERUP_TYPES.HOMING: // 追踪子弹
+            // 发射一组追踪子弹
+            fireHomingBullets();
+            break;
     }
 }
 
@@ -1000,27 +1079,65 @@ function fireSpecialWeapon() {
     shakeScreen(0.3);
 }
 
+// 发射追踪子弹
+function fireHomingBullets() {
+    // 追踪子弹数量
+    const bulletCount = 3;
+    
+    // 创建追踪子弹
+    for (let i = 0; i < bulletCount; i++) {
+        // 创建子弹
+        const bullet = {
+            x: player.x + player.width / 2 - 5,
+            y: player.y,
+            width: 10,
+            height: 10,
+            speed: 5,
+            color: '#0088ff', // 蓝色追踪子弹
+            power: 2.5, // 高伤害
+            type: 'homing',
+            rotation: 0,
+            rotationSpeed: 0.1,
+            target: null,
+            maxTurnRate: 0.15, // 最大转向角度
+            lifespan: 200, // 子弹寿命
+            currentLife: 0
+        };
+        
+        bullets.push(bullet);
+    }
+    
+    // 播放追踪子弹音效
+    playSound('special');
+    
+    // 屏幕轻微震动
+    shakeScreen(0.2);
+}
+
 // 更新游戏
 function update(time) {
     const deltaTime = time - lastTime;
     
-    // 更新玩家位置
-    if (keys.ArrowLeft && player.x > 0) {
-        player.x -= player.speed;
+    // 如果不是使用虚拟摇杆（即键盘控制），则更新玩家位置
+    if (!isMobile || !joystickActive) {
+        // 更新玩家位置
+        if (keys.ArrowLeft && player.x > 0) {
+            player.x -= player.speed;
+        }
+        if (keys.ArrowRight && player.x < canvas.width - player.width) {
+            player.x += player.speed;
+        }
+        if (keys.ArrowUp && player.y > 0) {
+            player.y -= player.speed;
+        }
+        if (keys.ArrowDown && player.y < canvas.height - player.height) {
+            player.y += player.speed;
+        }
+        if (keys.Space) {
+            fireBullet();
+        }
     }
-    if (keys.ArrowRight && player.x < canvas.width - player.width) {
-        player.x += player.speed;
-    }
-    if (keys.ArrowUp && player.y > 0) {
-        player.y -= player.speed;
-    }
-    if (keys.ArrowDown && player.y < canvas.height - player.height) {
-        player.y += player.speed;
-    }
-    if (keys.Space) {
-        fireBullet();
-    }
-    
+
     // 自动攻击
     if (autoAttack && time - lastAutoAttackTime > autoAttackDelay) {
         fireBullet();
@@ -1032,7 +1149,51 @@ function update(time) {
         const bullet = bullets[i];
         
         // 根据子弹类型更新位置
-        if (bullet.type === 'special') {
+        if (bullet.type === 'homing') {
+            // 追踪子弹逻辑
+            bullet.currentLife++;
+            
+            // 如果子弹存在时间过长或没有目标，移除子弹
+            if (bullet.currentLife > bullet.lifespan) {
+                bullets.splice(i, 1);
+                continue;
+            }
+            
+            // 查找最近的敌机作为目标
+            if (!bullet.target || !enemies.includes(bullet.target)) {
+                bullet.target = findNearestEnemy(bullet.x, bullet.y);
+            }
+            
+            if (bullet.target) {
+                // 计算目标方向
+                const dx = bullet.target.x + bullet.target.width/2 - bullet.x;
+                const dy = bullet.target.y + bullet.target.height/2 - bullet.y;
+                const targetAngle = Math.atan2(dy, dx);
+                
+                // 旋转子弹朝向目标
+                let angleDiff = targetAngle - bullet.rotation;
+                
+                // 调整角度差异范围在-PI到PI之间
+                while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                
+                // 限制转向速率
+                bullet.rotation += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), bullet.maxTurnRate);
+                
+                // 根据旋转角度更新位置
+                bullet.x += Math.cos(bullet.rotation) * bullet.speed;
+                bullet.y += Math.sin(bullet.rotation) * bullet.speed;
+            } else {
+                // 如果没有目标，直线向上移动
+                bullet.y -= bullet.speed;
+            }
+            
+            // 移除超出屏幕的子弹
+            if (bullet.x < 0 || bullet.x > canvas.width || 
+                bullet.y < 0 || bullet.y > canvas.height) {
+                bullets.splice(i, 1);
+            }
+        } else if (bullet.type === 'special') {
             // 特殊子弹按角度移动
             bullet.x += bullet.speedX;
             bullet.y += bullet.speedY;
@@ -1225,8 +1386,60 @@ function draw() {
         // 绘制更加精美的子弹
         ctx.fillStyle = bullet.color;
         
-        // 特殊子弹有不同的渲染方式
-        if (bullet.type === 'special') {
+        // 根据子弹类型选择不同的渲染方式
+        if (bullet.type === 'homing') {
+            // 保存上下文
+            ctx.save();
+            
+            // 设置位置和旋转
+            ctx.translate(bullet.x, bullet.y);
+            ctx.rotate(bullet.rotation);
+            
+            // 创建发光效果
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, bullet.width);
+            gradient.addColorStop(0, 'white');
+            gradient.addColorStop(0.3, bullet.color);
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, bullet.width, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 绘制箭头形子弹
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(bullet.width/2, 0);
+            ctx.lineTo(-bullet.width/2, bullet.width/2);
+            ctx.lineTo(-bullet.width/2, -bullet.width/2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 绘制追踪线(如果有目标)
+            if (bullet.target) {
+                ctx.setLineDash([3, 3]);
+                ctx.strokeStyle = 'rgba(0, 136, 255, 0.4)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                
+                const targetX = bullet.target.x + bullet.target.width/2 - bullet.x;
+                const targetY = bullet.target.y + bullet.target.height/2 - bullet.y;
+                const distance = Math.sqrt(targetX*targetX + targetY*targetY);
+                
+                // 有限的追踪线长度
+                const maxLineLength = 80;
+                const lineLength = Math.min(distance, maxLineLength);
+                const angle = Math.atan2(targetY, targetX);
+                
+                ctx.moveTo(0, 0);
+                ctx.lineTo(Math.cos(angle) * lineLength, Math.sin(angle) * lineLength);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+            
+            // 恢复上下文
+            ctx.restore();
+        } else if (bullet.type === 'special') {
             // 保存上下文
             ctx.save();
             
@@ -1428,6 +1641,11 @@ function draw() {
         ctx.arc(player.x + player.width/2, player.y + player.height/2, 
                 player.width, 0, Math.PI * 2);
         ctx.fill();
+    }
+    
+    // 绘制虚拟摇杆（仅在移动设备上）
+    if (isMobile && gameRunning && !gamePaused) {
+        drawVirtualJoystick();
     }
 }
 
@@ -1853,6 +2071,11 @@ window.addEventListener('load', function() {
     // 初始化星空背景
     createStars();
     
+    // 初始化虚拟摇杆（仅在移动设备上）
+    if (isMobile) {
+        initVirtualJoystick();
+    }
+    
     // 显示游戏就绪状态
     console.log("游戏初始化完成，等待开始");
     
@@ -2235,4 +2458,284 @@ function createAchievementSound() {
     oscillator.stop(audioContext.currentTime + 0.4);
     
     return { oscillator, gainNode };
-} 
+}
+
+// 查找最近的敌机
+function findNearestEnemy(x, y) {
+    if (enemies.length === 0) return null;
+    
+    let nearestEnemy = null;
+    let shortestDistance = Infinity;
+    
+    for (let i = 0; i < enemies.length; i++) {
+        const enemy = enemies[i];
+        const dx = enemy.x + enemy.width/2 - x;
+        const dy = enemy.y + enemy.height/2 - y;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+        
+        if (distance < shortestDistance) {
+            shortestDistance = distance;
+            nearestEnemy = enemy;
+        }
+    }
+    
+    return nearestEnemy;
+}
+
+// 创建追踪子弹音效
+function createHomingSoundEffect() {
+    if (!audioContext) return null;
+    
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.15);
+    oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.3);
+    
+    gainNode.gain.setValueAtTime(0.01, audioContext.currentTime);
+    gainNode.gain.linearRampToValueAtTime(0.2, audioContext.currentTime + 0.1);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.3);
+    
+    return { oscillator, gainNode };
+}
+
+// 初始化虚拟摇杆
+function initVirtualJoystick() {
+    console.log("初始化虚拟摇杆");
+    
+    // 向HTML中添加跨游戏提示
+    const gameTips = document.querySelector('.game-tips');
+    gameTips.textContent = "拖动左侧虚拟摇杆移动飞机，点击右侧按钮射击";
+    
+    // 显示虚拟控制
+    if (isMobile) {
+        virtualControls.style.display = 'block';
+    }
+    
+    // 更新摇杆位置
+    updateJoystickPosition();
+    
+    // 设置发射按钮点击事件（用于非触屏设备测试）
+    fireButton.addEventListener('click', function() {
+        if (gameRunning && !gamePaused) {
+            fireBullet();
+        }
+    });
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', updateJoystickPosition);
+    
+    // 添加触摸事件处理
+    setupTouchEvents();
+}
+
+// 更新摇杆位置
+function updateJoystickPosition() {
+    // 获取摇杆容器位置
+    const baseRect = joystickBase.getBoundingClientRect();
+    joystickCenter = {
+        x: baseRect.left + baseRect.width / 2,
+        y: baseRect.top + baseRect.height / 2
+    };
+    
+    // 重置摇杆手柄位置
+    joystickHandle.style.left = '50%';
+    joystickHandle.style.top = '50%';
+}
+
+// 设置触摸事件
+function setupTouchEvents() {
+    // 摇杆触摸事件
+    joystickBase.addEventListener('touchstart', handleJoystickStart, false);
+    document.addEventListener('touchmove', handleJoystickMove, { passive: false });
+    document.addEventListener('touchend', handleJoystickEnd, false);
+    document.addEventListener('touchcancel', handleJoystickEnd, false);
+    
+    // 发射按钮触摸事件
+    fireButton.addEventListener('touchstart', handleFireButtonTouch, false);
+    fireButton.addEventListener('touchend', handleFireButtonEnd, false);
+    
+    // 阻止页面滚动
+    document.addEventListener('touchmove', function(e) {
+        if (gameRunning) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+    
+    // 阻止双击缩放
+    document.addEventListener('dblclick', function(e) {
+        e.preventDefault();
+    }, { passive: false });
+    
+    console.log("触摸事件已设置");
+}
+
+// 处理摇杆触摸开始
+function handleJoystickStart(e) {
+    if (!gameRunning || gamePaused) return;
+    
+    e.preventDefault();
+    joystickActive = true;
+    joystickTouchId = e.changedTouches[0].identifier;
+    
+    // 获取基础位置
+    const baseRect = joystickBase.getBoundingClientRect();
+    joystickCenter = {
+        x: baseRect.left + baseRect.width / 2,
+        y: baseRect.top + baseRect.height / 2
+    };
+    
+    // 初始移动
+    handleJoystickMove(e);
+}
+
+// 处理摇杆触摸移动
+function handleJoystickMove(e) {
+    if (!joystickActive || !gameRunning || gamePaused) return;
+    
+    e.preventDefault();
+    
+    // 寻找匹配的触摸点
+    let touch = null;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId) {
+            touch = e.changedTouches[i];
+            break;
+        }
+    }
+    
+    if (!touch) return;
+    
+    // 计算与摇杆中心的距离和角度
+    const dx = touch.clientX - joystickCenter.x;
+    const dy = touch.clientY - joystickCenter.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // 摇杆移动范围限制
+    const maxDistance = joystickBase.clientWidth / 2 - joystickHandle.clientWidth / 2;
+    const limitedDistance = Math.min(distance, maxDistance);
+    const angle = Math.atan2(dy, dx);
+    
+    // 计算摇杆手柄位置
+    const moveX = Math.cos(angle) * limitedDistance;
+    const moveY = Math.sin(angle) * limitedDistance;
+    
+    // 设置摇杆手柄位置
+    joystickHandle.style.transform = `translate(${moveX}px, ${moveY}px)`;
+    
+    // 计算移动值（-1到1范围）
+    const moveRatioX = moveX / maxDistance;
+    const moveRatioY = moveY / maxDistance;
+    
+    // 应用到玩家位置
+    const moveSpeed = player.speed * 1.5; // 让移动更平滑
+    player.x = Math.max(0, Math.min(canvas.width - player.width, 
+                         player.x + moveRatioX * moveSpeed));
+    player.y = Math.max(0, Math.min(canvas.height - player.height, 
+                         player.y + moveRatioY * moveSpeed));
+}
+
+// 处理摇杆触摸结束
+function handleJoystickEnd(e) {
+    // 寻找匹配的触摸点
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joystickTouchId) {
+            joystickActive = false;
+            joystickTouchId = null;
+            
+            // 重置摇杆手柄位置
+            joystickHandle.style.transform = 'translate(0, 0)';
+            break;
+        }
+    }
+}
+
+// 处理发射按钮触摸
+function handleFireButtonTouch(e) {
+    if (!gameRunning || gamePaused) return;
+    
+    e.preventDefault();
+    fireButtonActive = true;
+    fireButtonTouchId = e.changedTouches[0].identifier;
+    
+    // 添加按钮按下样式
+    fireButton.classList.add('active');
+    
+    // 发射子弹
+    fireBullet();
+    
+    // 如果不是自动攻击模式，设置连续发射
+    if (!autoAttack) {
+        if (fireInterval) clearInterval(fireInterval);
+        fireInterval = setInterval(function() {
+            if (fireButtonActive && gameRunning && !gamePaused) {
+                fireBullet();
+            } else {
+                clearInterval(fireInterval);
+                fireInterval = null;
+            }
+        }, 200);
+    }
+}
+
+// 处理发射按钮触摸结束
+function handleFireButtonEnd(e) {
+    // 寻找匹配的触摸点
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === fireButtonTouchId) {
+            fireButtonActive = false;
+            fireButtonTouchId = null;
+            
+            // 移除按钮按下样式
+            fireButton.classList.remove('active');
+            
+            // 清除连续发射定时器
+            if (fireInterval) {
+                clearInterval(fireInterval);
+                fireInterval = null;
+            }
+            break;
+        }
+    }
+}
+
+// 设置发射连续定时器
+let fireInterval = null;
+
+// ... existing code ...
+
+// 页面加载完成后初始化画布大小
+window.addEventListener('load', function() {
+    // 初始化画布大小
+    resizeCanvas();
+    
+    // 预先加载资源
+    loadResources();
+    
+    // 初始化音频
+    initAudio();
+    
+    // 初始化星空背景
+    createStars();
+    
+    // 初始化虚拟摇杆（仅在移动设备上）
+    if (isMobile) {
+        initVirtualJoystick();
+    }
+    
+    // 显示游戏就绪状态
+    console.log("游戏初始化完成，等待开始");
+    
+    // 显示难度选择界面
+    showDifficultySelectScreen();
+});
+
+// ... existing code ... 
